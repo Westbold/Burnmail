@@ -1,12 +1,15 @@
 /**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
+ * Production account and D1 database provisioned through Cloudflare MCP.
+ * Keep credentials in Worker secrets, never in this file.
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "temp-mail",
+	"account_id": "71f5759e26857110109f0877de8ab0ad",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-07-15",
+	"workers_dev": true,
+	"preview_urls": false,
 	"observability": {
 		"enabled": true
 	},
@@ -14,47 +17,15 @@
 		{
 			"binding": "D1",
 			"database_name": "temp-mail-d1",
-			"database_id": "7a8d8ce6-df0e-4c56-8a7a-e3f5895a4771" // Replace with the ID from `bun run db:create`
+			"database_id": "ba7290ed-c10d-4548-940a-566d279d6859"
 		}
 	],
 	"triggers": {
 		"crons": ["0 */2 * * *"]
 	},
 	"vars": {
-		"TELEGRAM_LOG_ENABLE": true,
+		"TELEGRAM_LOG_ENABLE": false,
 		"HOURS_TO_DELETE_D1": 3
 	},
-	// "assets": { "directory": "./public/" },
-	/**
-	 * Smart Placement
-	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	"placement": { "mode": "smart" },
-
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-
-	/**
-	 * Environment Variables
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-	 */
-	// "vars": { "MY_VARIABLE": "production_value" },
-	/**
-	 * Note: Use secrets to store sensitive data.
-	 * https://developers.cloudflare.com/workers/configuration/secrets/
-	 */
-
-	/**
-	 * Static Assets
-	 * https://developers.cloudflare.com/workers/static-assets/binding/
-	 */
-	/**
-	 * Service Bindings (communicate between multiple Workers)
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
-	 */
-	// "services": [{ "binding": "MY_SERVICE", "service": "my-service" }]
+	"placement": { "mode": "smart" }
 }
