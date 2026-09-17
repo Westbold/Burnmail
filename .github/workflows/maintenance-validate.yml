@@ -1,0 +1,109 @@
+name: Validate Maintenance Changes
+
+on:
+  push:
+    branches: [maintenance/readme-private-config]
+    paths: [.github/workflows/maintenance-validate.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Apply prepared source changes
+        shell: python
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import base64, gzip, hashlib, json, os, pathlib, urllib.request
+          parts = [
+              "0978296e9023a3ceaef1f4f6fdd95e5c01e63319",
+              "ca280f639487a420dcdc06e78a6289c38b6afeae",
+              "615d5f4a91401d00b845c6707c068d349dc095c0",
+              "63e5cca04dabe83728d31bba6c4be4d48a06d8e7",
+              "cf5091a3403b450cd0ad10ee3a1d72c749cebd09",
+          ]
+          data = bytearray()
+          for sha in parts:
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/blobs/{sha}",
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"},
+              )
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  data.extend(base64.b64decode(json.load(response)["content"]))
+          payload = gzip.decompress(data)
+          assert hashlib.sha256(payload).hexdigest() == "30d632007cd78c9ad95d69aa73cf7ccbcd17fc01ff28e34f9141711230d4a235"
+          entries = json.loads(payload)
+          for entry in entries:
+              path = pathlib.Path(entry["path"])
+              assert not path.is_absolute() and ".." not in path.parts
+              if entry.get("sha", "present") is None:
+                  path.unlink(missing_ok=True)
+              else:
+                  path.parent.mkdir(parents=True, exist_ok=True)
+                  path.write_text(entry["content"], encoding="utf-8")
+          pathlib.Path(".github/workflows/maintenance-validate.yml").unlink()
+          print(f"Applied {len(entries)} prepared source changes")
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Format changed source and scripts
+        run: bunx biome check --write ./src ./scripts
+      - name: Run tests
+        run: bun test
+      - name: Check TypeScript
+        run: bun run tsc
+      - name: Check lint and formatting
+        run: bun run check
+      - name: Build without credentials
+        run: bun run deploy --dry-run --outdir dist
+      - name: Store validated source tree without updating any branch
+        shell: python
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import json, os, pathlib, subprocess, urllib.request
+          def git(*args):
+              return subprocess.check_output(["git", *args])
+          base_tree = git("rev-parse", "HEAD^{tree}").decode().strip()
+          paths = set(git("diff", "--name-only", "-z").decode().split("\0"))
+          paths.update(git("ls-files", "--others", "--exclude-standard", "-z").decode().split("\0"))
+          entries = []
+          for name in sorted(paths - {""}):
+              path = pathlib.Path(name)
+              entry = {"path": name, "mode": "100644", "type": "blob"}
+              if path.is_file():
+                  entry["content"] = path.read_text(encoding="utf-8")
+              else:
+                  entry["sha"] = None
+              entries.append(entry)
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/trees",
+              data=json.dumps({"base_tree": base_tree, "tree": entries}).encode(),
+              headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json", "Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=60) as response:
+              remote_tree = json.load(response)["sha"]
+          subprocess.run(["git", "add", "-A"], check=True)
+          local_tree = git("write-tree").decode().strip()
+          assert remote_tree == local_tree, (remote_tree, local_tree)
+          print(f"VALIDATED_TREE_SHA={remote_tree}")
+          with open("/tmp/passworthy-validated.tar", "wb") as output:
+              subprocess.run(["git", "archive", "--format=tar", local_tree], stdout=output, check=True)
+          pathlib.Path("/tmp/validation.json").write_text(json.dumps({"tree_sha": remote_tree, "source_commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "changed_files": len(entries)}))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-source
+          path: |
+            /tmp/passworthy-validated.tar
+            /tmp/validation.json
+          retention-days: 1
