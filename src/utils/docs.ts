@@ -60,8 +60,8 @@ ${`\n${Array.from(DOMAINS_SET)
 		},
 		servers: [
 			{
-				url: "https://api.barid.site",
-				description: "Production server",
+				url: "/",
+				description: "This deployment",
 			},
 		],
 		tags: [
