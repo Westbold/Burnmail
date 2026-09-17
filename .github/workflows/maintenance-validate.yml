@@ -25,6 +25,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           import base64, gzip, hashlib, json, os, pathlib, urllib.request
+          def blob(sha):
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/blobs/{sha}",
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"},
+              )
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return base64.b64decode(json.load(response)["content"])
           parts = [
               "0978296e9023a3ceaef1f4f6fdd95e5c01e63319",
               "ca280f639487a420dcdc06e78a6289c38b6afeae",
@@ -32,15 +39,7 @@ jobs:
               "63e5cca04dabe83728d31bba6c4be4d48a06d8e7",
               "cf5091a3403b450cd0ad10ee3a1d72c749cebd09",
           ]
-          data = bytearray()
-          for sha in parts:
-              req = urllib.request.Request(
-                  f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/blobs/{sha}",
-                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"},
-              )
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  data.extend(base64.b64decode(json.load(response)["content"]))
-          payload = gzip.decompress(data)
+          payload = gzip.decompress(b"".join(blob(sha) for sha in parts))
           assert hashlib.sha256(payload).hexdigest() == "30d632007cd78c9ad95d69aa73cf7ccbcd17fc01ff28e34f9141711230d4a235"
           entries = json.loads(payload)
           for entry in entries:
@@ -51,6 +50,7 @@ jobs:
               else:
                   path.parent.mkdir(parents=True, exist_ok=True)
                   path.write_text(entry["content"], encoding="utf-8")
+          pathlib.Path("scripts/smoke.ts").write_bytes(blob("4e88b63927f4c040c49e362b9b10128097be90cd"))
           pathlib.Path(".github/workflows/maintenance-validate.yml").unlink()
           print(f"Applied {len(entries)} prepared source changes")
       - name: Install locked dependencies
