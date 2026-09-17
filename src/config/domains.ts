@@ -1,53 +1,8 @@
-// List of supported email domains
-
+// Only domains owned and routed to this deployment belong in this list.
 export const DOMAINS = [
 	{
-		owner: "vwh",
-		domain: "barid.site",
-	},
-	{
-		owner: "vwh",
-		domain: "vwh.sh",
-	},
-	{
-		owner: "vwh",
-		domain: "iusearch.lol",
-	},
-	{
-		owner: "mm6x",
-		domain: "lifetalk.us",
-	},
-	{
-		owner: "z44d",
-		domain: "z44d.pro",
-	},
-	{
-		owner: "blockton",
-		domain: "wael.fun",
-	},
-	{
-		owner: "HprideH",
-		domain: "tawbah.site",
-	},
-	{
-		owner: "HprideH",
-		domain: "kuruptd.ink",
-	},
-	{
-		owner: "oxno1",
-		domain: "oxno1.space",
-	},
-	{
-		owner: "None",
-		domain: "hacktivc.com",
-	},
-	{
-		owner: "None",
-		domain: "lealaom.xyz",
-	},
-	{
-		owner: "None",
-		domain: "leala.site",
+		owner: "Westbold",
+		domain: "0357000.xyz",
 	},
 ] satisfies {
 	owner: string;
