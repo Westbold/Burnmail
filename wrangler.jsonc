@@ -10,6 +10,9 @@
 	"compatibility_date": "2025-07-15",
 	"workers_dev": true,
 	"preview_urls": false,
+	"routes": [
+		{ "pattern": "api.0357000.xyz", "custom_domain": true }
+	],
 	"observability": {
 		"enabled": true
 	},
