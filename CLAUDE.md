@@ -1,215 +1,35 @@
-# Temp Mail Worker - Claude Code Instructions
+# Passworthy contributor instructions
 
-This repository is a **Cloudflare Workers-based temporary email service** that provides claimed disposable email addresses. The service receives emails via Cloudflare Email Routing, stores email for claimed addresses in D1, discards email for unclaimed addresses, and provides authorized REST API endpoints for managing emails.
+This repository implements claim-based temporary inboxes for Passworthy using Bun,
+TypeScript, Hono, Cloudflare Email Routing, and D1. Read README.md and documentation/03_apispec.md
+for behavior; do not copy upstream hosted-service assumptions into project documentation.
 
-## Project Overview
+## Configuration boundary
 
-- **Type**: Cloudflare Worker + Hono Framework
-- **Purpose**: Temporary email service
-- **Live API**: https://api.barid.site
-- **Web Client**: https://web.barid.site
-- **Runtime**: Cloudflare Workers (Edge Computing)
-- **Package Manager**: Bun
+Never commit a live receiving domain, API hostname, actual test mailbox address, or secret.
+Do not hide such values in encoded strings. EMAIL_DOMAINS is a Worker secret read at runtime;
+API_HOSTNAME is private build configuration. All tests and examples use reserved test domains.
+Keep .env, .dev.vars, generated deployment configs, and hostname-specific diagnostics ignored.
+Preserve the original copyright notice in LICENSE.
 
-## Technology Stack
+## Invariants
 
-### Core Technologies
-- **Runtime**: Cloudflare Workers (Edge Computing)
-- **Framework**: Hono.js (Lightweight web framework)
-- **Language**: TypeScript (ESNext target)
-- **Package Manager**: Bun
+- Claims are required before receipt and are protected by hashed bearer keys.
+- The domain allowlist is request/environment-specific, with no production fallback.
+- Unsupported and unclaimed mail is discarded before parsing, storing, or forwarding.
+- Releasing a claim deletes the recipient's stored mail. Claims otherwise do not expire.
+- Attachments are not stored. Webhooks are centralized and signed separately from claim keys.
+- The API explorer stays on the current origin; its examples must not embed runtime domains.
 
-### Key Dependencies
-- **@hono/zod-openapi**: OpenAPI documentation generation
-- **@hono/zod-validator**: Request validation with Zod
-- **zod**: Schema validation
-- **postal-mime**: Email parsing
-- **html-to-text**: HTML content conversion
-- **@paralleldrive/cuid2**: Unique ID generation
+## Workflow
 
-### Development Tools
-- **Biome**: Code formatting and linting (configured with tabs, 100 char line width)
-- **TypeScript**: Strict mode enabled
-- **Wrangler**: Cloudflare Workers CLI
-- **Knip**: Unused dependency detection
+Run bun test, bun run tsc, bun run check, and bun run deploy --dry-run --outdir dist before
+shipping. Unit tests use in-memory doubles and reserved domains. bun run dev uses remote
+Cloudflare resources, so do not treat it as an isolated database.
 
-### Cloudflare Services
-- **D1 Database**: SQLite database for email storage
-- **Email Routing**: Email receiving service
-- **Scheduled Functions**: Automated cleanup and reporting
+Production main pushes deploy through Cloudflare Builds. Use bun run deploy, which injects
+the private custom route, cleans up its generated config, and runs production smoke tests.
+Do not bypass it with a plain Wrangler deployment or recreate existing D1 resources.
 
-## Directory Structure
-
-```
-src/
-├── app.ts                     # Main Hono application setup
-├── index.ts                   # Worker entry point (email, scheduled, fetch)
-├── config/                    # Configuration files
-│   ├── constants.ts           # Application constants (limits, types)
-│   └── domains.ts             # Supported email domains configuration
-├── database/                  # Database interaction modules
-│   ├── d1.ts                  # D1 database operations
-├── handlers/                  # Event handlers
-│   ├── emailHandler.ts        # Email processing handler
-│   └── scheduledHandler.ts   # Scheduled task handlers
-├── middlewares/               # Route middlewares
-│   ├── cors.ts                # CORS middleware
-│   └── validateDomain.ts      # Domain validation middleware
-├── routes/                    # API route definitions
-│   ├── emailRoutes.ts         # Email-related endpoints
-│   └── healthRoutes.ts        # Health check endpoint
-├── schemas/                   # Zod schemas for validation
-│   ├── emails/                # Email-related schemas
-└── utils/                     # Utility functions
-    ├── docs.ts                # OpenAPI documentation setup
-    ├── helpers.ts             # Helper functions
-    ├── http.ts                # HTTP response utilities
-    ├── logger.ts              # Logging utilities (including Telegram)
-    ├── mail.ts                # Email processing utilities
-    ├── performance.ts         # Performance monitoring
-    └── telegram.ts            # Telegram logging integration
-
-sql/                           # Database schema files
-├── schema.sql                 # Database table definitions
-└── indexes.sql                # Database indexes
-
-cloudflare-info/               # Cloudflare information utility
-└── index.ts                   # Account info script
-```
-
-## Available Scripts
-
-### Development & Deployment
-- `bun run dev` - Start local development server
-- `bun run deploy` - Deploy to Cloudflare Workers
-- `bun run tail` - View live logs from deployed worker
-
-### Database Management
-- `bun run db:create` - Create D1 database
-- `bun run db:tables` - Apply database schema
-- `bun run db:indexes` - Apply database indexes
-
-### Storage Setup
-### Code Quality
-- `bun run check` - Run all linting and formatting checks
-- `bun run lint` - Run Biome linter
-- `bun run lint:fix` - Fix linting issues automatically
-- `bun run format` - Format code with Biome
-- `bun run tsc` - Run TypeScript compiler
-- `bun run knip` - Check for unused dependencies
-
-### Utilities
-- `bun run cf-info` - Display Cloudflare account information
-- `bun run cf-typegen` - Generate TypeScript types for Cloudflare bindings
-
-## Key Features
-
-### Email Service
-- **Multiple Domains**: Supports 9+ donated domains (barid.site, vwh.sh, etc.)
-- **Address Claims**: Users permanently claim addresses with an `Authorization: Bearer <key>` token
-- **Email Storage**: Stores emails in D1 database with full content
-- **HTML Processing**: Converts HTML emails to text with size limits
-- **Webhook Forwarding**: Optionally forwards stored emails to a signed centralized webhook
-- **Automatic Cleanup**: Scheduled deletion of old emails (3-hour retention)
-- **Attachment Handling**: Incoming attachments are ignored and not stored
-
-### API Endpoints
-- RESTful API with OpenAPI documentation
-- Address claims (claim, release)
-- Authorized email management (list, get, delete)
-- Health check endpoint
-- Domain listing endpoint
-
-### Monitoring & Logging
-- **Telegram Integration**: Optional Telegram bot logging
-- **Performance Monitoring**: Built-in performance tracking
-- **Error Handling**: Comprehensive error logging
-- **Observability**: Cloudflare Workers observability enabled
-
-## Architecture Patterns
-
-### Modular Design
-- **Separation of Concerns**: Clear separation between routes, handlers, database, and utilities
-- **Dependency Injection**: Cloudflare bindings injected via environment
-- **Schema-Driven**: Zod schemas for request/response validation
-
-### Cloudflare-Native
-- **Edge Computing**: Runs on Cloudflare's edge network
-- **Serverless**: No server management required
-- **Multi-Service Integration**: Uses D1, Email Routing, and Scheduled Functions
-
-### Configuration Management
-- **Environment-Based**: Different configs for dev/preview/production
-- **Domain Configuration**: Centralized domain management
-- **Constants**: Application-wide constants for limits and settings
-
-## Development Setup
-
-### Prerequisites
-- Bun package manager
-- Cloudflare account with Workers access
-- Domain with Email Routing enabled
-
-### Quick Start
-```bash
-# Install dependencies
-bun install
-
-# Login to Cloudflare
-bun wrangler login
-
-# Set up database (update wrangler.jsonc with generated IDs)
-bun run db:create
-bun run db:tables
-bun run db:indexes
-
-# Run locally
-bun run dev
-
-# Deploy
-bun run deploy
-```
-
-## Configuration Notes
-
-### Environment Variables
-- `TELEGRAM_LOG_ENABLE`: Enable/disable Telegram logging
-- `HOURS_TO_DELETE_D1`: Email retention period (default: 3 hours)
-- `TELEGRAM_BOT_TOKEN`: Telegram bot token (secret)
-- `TELEGRAM_CHAT_ID`: Telegram chat ID for logging (secret)
-- `WEBHOOK_URL`: Optional centralized webhook URL for stored emails
-- `WEBHOOK_SECRET`: Optional shared secret for webhook HMAC-SHA512 signatures
-
-### Cloudflare Bindings
-- **D1**: Database binding for address claims and email storage
-- **Scheduled**: Cron job triggers for cleanup
-
-### Development Tips
-- Use `.dev.vars` for local development secrets
-- Update `wrangler.jsonc` with your Cloudflare resource IDs
-- Use Biome for consistent code formatting
-- Leverage the extensive TypeScript types and schemas
-
-## Code Style Guidelines
-
-### Formatting (Biome)
-- **Indentation**: Tabs, 2 spaces width
-- **Line Width**: 100 characters maximum
-- **Quotes**: Double quotes for strings
-- **Semicolons**: Always used
-- **Brackets**: K&R style (bracket on same line)
-
-### TypeScript
-- **Strict Mode**: Enabled
-- **Module Resolution**: Bundler-style
-- **Path Aliases**: `@/*` maps to `./src/*`
-- **JSX**: Uses Hono JSX with React-jsx transform
-
-### Best Practices
-- Use Zod schemas for all input validation
-- Leverage Cloudflare Workers' edge computing capabilities
-- Implement proper error handling and logging
-- Follow the established modular architecture
-- Use TypeScript interfaces for type safety
-
-This project follows modern Cloudflare Workers development patterns with a focus on performance, reliability, and maintainability.
+Keep code straightforward, typed, and small. Follow the repository's Biome formatting.
+Add regression tests for auth, runtime configuration, and message handling when changing them.

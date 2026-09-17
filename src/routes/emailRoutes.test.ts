@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import app from "@/app";
-import { DOMAINS_SET } from "@/config/domains";
 import type { Email } from "@/schemas/emails";
 
 interface StoredClaim {
@@ -88,19 +87,10 @@ class FakeD1Statement {
 }
 
 function makeEnv(db: FakeD1) {
-	return { D1: db as unknown as D1Database } as CloudflareBindings;
+	return { D1: db as unknown as D1Database, EMAIL_DOMAINS: "example.test" } as CloudflareBindings;
 }
 
 describe("email route access control", () => {
-	// Test addresses must not depend on the real domains enabled in production.
-	beforeAll(() => {
-		DOMAINS_SET.add("example.test");
-	});
-
-	afterAll(() => {
-		DOMAINS_SET.delete("example.test");
-	});
-
 	test("claims addresses idempotently and rejects different bearer tokens", async () => {
 		const db = new FakeD1();
 		const env = makeEnv(db);

@@ -6,7 +6,7 @@ describe("webhook signatures", () => {
 		const body = createWebhookBody({
 			id: "email_1",
 			from_address: "sender@example.com",
-			to_address: "inbox@barid.site",
+			to_address: "inbox@example.test",
 			subject: "Hello",
 			received_at: 1753317948,
 			html_content: "<p>Hello</p>",
@@ -16,10 +16,10 @@ describe("webhook signatures", () => {
 		const signature = await createWebhookSignature(body, "top-secret");
 
 		expect(body).toBe(
-			'{"id":"email_1","from_address":"sender@example.com","to_address":"inbox@barid.site","subject":"Hello","received_at":1753317948,"html_content":"<p>Hello</p>","text_content":"Hello"}',
+			'{"id":"email_1","from_address":"sender@example.com","to_address":"inbox@example.test","subject":"Hello","received_at":1753317948,"html_content":"<p>Hello</p>","text_content":"Hello"}',
 		);
 		expect(signature).toBe(
-			"HMAC-SHA512=9VAQx2i2p4oJbVYCofgUF0IcVqZjqB3OvAZKPW8dLxWmQr+bzEaWAK8tst0+IAGUK4IIp2S8hMB+fpaxyRPUXQ==",
+			"HMAC-SHA512=If9sMfZpRBBpaD68gk8B3NnQnax/bhimBrtCGmGtvWTwwttYwTz4Z/UTKId+nlG/vAZMKQm0y27fwpK1iTpjAA==",
 		);
 	});
 });

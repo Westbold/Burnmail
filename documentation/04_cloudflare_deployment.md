@@ -1,166 +1,66 @@
-# Passworthy Cloudflare deployment
+# Cloudflare deployment runbook
 
-## Deployment snapshot: September 17, 2026
+Production configuration is stored in Cloudflare. Do not publish receiving domains, API
+hostnames, actual mailbox addresses, or credential values in this repository.
 
-The application is **deployed**, not merely provisioned. Its `workers.dev` endpoint passed
-live HTTPS and D1 authorization tests. The receiving domain is configured, but public DNS
-and an actual incoming email are not yet verified as working.
+## Existing deployment
 
-| Resource | Value |
-| --- | --- |
-| Company receiving domain | `0357000.xyz` |
-| Working API and interactive documentation | `https://temp-mail.westbold-passworthy.workers.dev` |
-| Configured custom API hostname, pending public DNS | `https://api.0357000.xyz` |
-| Cloudflare account | `Leon@westbold.com's Account` |
-| Account ID | `71f5759e26857110109f0877de8ab0ad` |
-| DNS zone ID | `689331e6733c6347f3aacae508f1c2ef` |
-| Worker | `temp-mail` |
-| Worker ID | `244965baf92949609738f10b0251d521` |
-| Actual deployment time | `2026-09-17T19:54:17.208081Z` |
-| Deployment ID returned by the upload API | `b1978925593e44d9bbb444b969f322c3` |
-| D1 database | `temp-mail-d1` |
-| D1 ID | `ba7290ed-c10d-4548-940a-566d279d6859` |
-| D1 binding | `D1` |
-| Application source commit | `a9d7572905daba930e11227a0d1b90ce559d47a6` |
+Reuse the existing `temp-mail` Worker and its D1 binding. The repository's Wrangler config
+contains the account/database identifiers, retention settings, and cleanup schedule, but
+no domain routes. Email Routing's catch-all is managed in Cloudflare and sends to the Worker.
 
-Personal domains, including `leibmann.org`, are not involved in this deployment.
+Before a real deployment, configure:
 
-## What is configured
+| Scope | Name | Value supplied privately |
+| --- | --- | --- |
+| Worker secret | `EMAIL_DOMAINS` | Comma-separated receiving-domain allowlist |
+| Cloudflare Builds secret | `API_HOSTNAME` | Custom API hostname |
+| Cloudflare Builds secret | `EMAIL_DOMAINS` | Expected runtime allowlist, used only for auditing and verification |
 
-- Only `0357000.xyz` is allowed in `src/config/domains.ts`; upstream domains were removed.
-- Email Routing is enabled, synced, and reports `ready`.
-- The enabled catch-all rule sends mail to the `temp-mail` Worker.
-- All three Cloudflare MX records, SPF, and the Cloudflare-provided DKIM record are installed.
-- The Worker exports `fetch`, `email`, and `scheduled` handlers.
-- The D1 `emails` and `claims` tables and four email indexes are present.
-- The actual cleanup trigger is `0 */2 * * *`.
-- Messages older than three hours are eligible for deletion on that two-hour schedule.
-  This is not a promise to delete each message at exactly three hours old. Claims do not expire.
-- Telegram logging is disabled. Webhook forwarding is disabled because its secrets are absent.
-- Interactive API documentation uses this deployment, not the upstream API.
-- `api.0357000.xyz` is attached as a Worker custom domain and recorded in `wrangler.jsonc`.
+The runtime and build copies of `EMAIL_DOMAINS` should agree. Build variables are not Worker
+runtime bindings. Set the Worker secret separately. Wrangler preserves existing secrets
+when deploying code; never put their values in `wrangler.jsonc`.
 
-Do not create another Worker or run `db:create` again.
+## Automatic deployments
 
-## Verified checks and remaining blocker
+Connect the existing Worker to `Westbold/Passworthy-Temp-Email` in Cloudflare's Git integration.
+Use production branch `main`, root `/`, build command
+`bun install --frozen-lockfile && bun test && bun run tsc`, and deploy command `bun run deploy`.
+Use Cloudflare's managed build token rather than committing a token or putting it into chat.
 
-[Production smoke run](https://github.com/Westbold/Passworthy-Temp-Email/actions/runs/35267882267)
+`bun run deploy` does the following:
 
-The `workers.dev` API job passed at `2026-09-17T19:57:06Z`:
+1. Requires the private custom hostname and checks tracked files for private configured values.
+2. Writes an ignored, owner-readable temporary Wrangler config containing the custom route.
+3. Deploys the Worker with the checked-in D1 binding, variables, and schedule.
+4. Removes the temporary config, including after a failed Wrangler command.
+5. Runs live DNS, HTTPS, and claim-authorization checks without logging recipient addresses.
 
-- Valid HTTPS and HTTP 200 from `/health`.
-- `/domains` returns only `0357000.xyz`.
-- `/openapi.json` keeps requests on the same origin.
-- Claim creation and same-key idempotency against the real D1 database.
-- Conflicting claims return 409; missing keys return 401; wrong keys return 403.
-- Authorized inbox listing and counts work.
-- Wrong-key deletion and unsupported domains are denied.
-- Test claims were released; released inbox access returns 404.
+Do not bypass this wrapper with a plain Wrangler deploy: the wrapper supplies the private
+custom-domain route. A dry run skips the private route and live checks and can run in public
+CI without secrets. Non-production version uploads do not promote a production deployment.
 
-The DNS job at `2026-09-17T19:57:03Z` found:
+A build/test failure prevents the deploy command. A post-deploy smoke-test failure is reported
+but does not automatically roll back code that has already deployed. Consult the private
+Cloudflare build/deployment logs and compare the active version with the intended commit.
 
-| Query target | Observed result |
-| --- | --- |
-| `darwin.ns.cloudflare.com` | Correct authoritative NS records and all three MX records |
-| `pola.ns.cloudflare.com` | Correct authoritative NS records and all three MX records |
-| `1.1.1.1` | NXDOMAIN for the new domain |
-| `8.8.8.8` | NXDOMAIN for the new domain |
-| Google DNS over HTTPS | NXDOMAIN, with an `xyz.` SOA authority response |
+## Fresh installations
 
-Cloudflare Registrar reports the registration as active, created at
-`2026-09-17T19:49:21Z`, with the expected Cloudflare nameservers. This is consistent with
-new-registration DNS publication/propagation still being incomplete. The configured records
-are correct at Cloudflare's authoritative servers; public DNS convergence has not been proven.
-Do not replace or move the nameservers to try to fix this discrepancy.
+Follow [setup](01_setup.md). Create a new database only for a new installation; apply the
+schema and indexes, set the Worker secret, attach the custom API hostname, and configure
+Email Routing for the intended receiving domain. Claim a test address before sending mail.
+Keep the actual infrastructure values in Cloudflare or ignored local files.
 
-A Cloudflare verification email was requested for a temporary claimed test address.
-No message had reached D1 at `2026-09-17T19:59:55Z`. Therefore actual external email delivery
-must not be described as tested successfully yet. The custom API hostname also failed its
-public reachability test while the domain was unresolved.
+## Manual deployment and secret maintenance
 
-The repeatable **Production Smoke Test** workflow is available under GitHub Actions.
-Select **Run workflow**, branch `main`, to repeat both HTTPS/API jobs and the DNS check.
-It uses no Cloudflare token, creates random temporary test claims, and cleans them up.
-It does not run on a recurring schedule and does not test external SMTP delivery.
+Supply `API_HOSTNAME` through an ignored `.env` or the shell, authenticate Wrangler, and run
+`bun run deploy`. `.env.example` shows only a reserved placeholder. For production, also
+supply the expected `EMAIL_DOMAINS` build value to enable the exact source/allowlist audit.
 
-## Start using the working API
+Use Worker secrets for optional webhook and Telegram credentials. Updating a secret can
+create or deploy a Worker version; inspect the currently deployed version when undeployed
+preview versions exist rather than accidentally promoting a preview.
 
-The application receives email; it does not provide an outbound SMTP account or a paid mailbox.
-Each address must be claimed before mail is sent to it. Unclaimed mail is deliberately discarded.
-The claim key is an application secret you generate, not a Cloudflare API token.
-
-Example for Bash with OpenSSL and curl installed:
-
-```bash
-API='https://temp-mail.westbold-passworthy.workers.dev'
-ADDRESS='test@0357000.xyz'
-KEY="$(openssl rand -hex 32)"
-
-curl --fail-with-body -X PUT "$API/claims/$ADDRESS" \
-  -H "Authorization: Bearer $KEY"
-```
-
-Keep `KEY` private and save it in your own secret store. Reusing the address with a different
-key returns 409. A new address is first-claim-wins; this prototype has no separate administrator
-approval gate for claiming unused addresses.
-
-After public MX resolution works, send an email from another mailbox to `test@0357000.xyz`,
-then read it using the same terminal session/key:
-
-```bash
-curl --fail-with-body "$API/emails/$ADDRESS" \
-  -H "Authorization: Bearer $KEY"
-
-# Use an id from that list to retrieve the full message:
-curl --fail-with-body "$API/inbox/EMAIL_ID" \
-  -H "Authorization: Bearer $KEY"
-```
-
-Releasing an address also deletes its stored emails:
-
-```bash
-curl --fail-with-body -X DELETE "$API/claims/$ADDRESS" \
-  -H "Authorization: Bearer $KEY"
-```
-
-Attachments are not stored. Once `api.0357000.xyz` resolves and passes HTTPS checks, it can
-replace the longer API hostname without changing inbox keys or data.
-
-## How this deployment was performed
-
-Cloudflare's GitHub integration is still unapproved: the repository connection API returned
-error `8000008`. This did **not** prevent the initial application deployment.
-
-The tested GitHub Actions artifact was downloaded and verified. A short-lived, checksum-gated
-Cloudflare staging Worker accepted only that exact public JavaScript artifact. It stored the
-artifact temporarily in a dedicated staging table; Cloudflare MCP read it, verified its SHA-256
-again, and uploaded the complete application using the Worker upload API with its D1 binding.
-
-- Build run: `35267342928`
-- Build artifact: `10517570343`
-- Application bundle size: `581041` bytes
-- Application bundle SHA-256: `48b70480ca86d001a77a7b84709f571dc0cfee9b77894a9daf6ad40b28bded2d`
-
-The temporary staging Worker, its database table, and the one-time GitHub transfer workflow
-were removed after deployment. No Cloudflare API credentials were written to GitHub.
-Later commits add deployment configuration, tests, and this record; they do not change the
-application bundle's source code.
-
-## Future automatic deployment: optional separate authorization
-
-The running service does not require this step, but pushes to `main` do not automatically
-update production until Cloudflare's Git integration is connected or another deployment
-mechanism is configured. The **Worker Build** workflow only tests and bundles code.
-
-To enable Cloudflare Builds:
-
-1. Open [Workers & Pages](https://dash.cloudflare.com/71f5759e26857110109f0877de8ab0ad/workers-and-pages).
-2. Select **temp-mail > Settings > Builds > Connect**.
-3. Authorize Cloudflare's GitHub integration for **Westbold/Passworthy-Temp-Email**.
-4. Use branch `main`, root `/`, build command
-   `bun install --frozen-lockfile && bun test && bun run tsc`, and deploy command `bun run deploy`.
-5. Use Cloudflare's default generated build token and save the connection.
-
-The existing `wrangler.jsonc` already identifies the account, database, cron, runtime variables,
-and custom API hostname. Keep any future webhook or Telegram secrets in Cloudflare secrets,
-not in repository files.
+Public DNS and the public `/domains` endpoint can still reveal a running service's receiving
+domains. This separation prevents committing deployment values; it does not hide the public
+service. Existing Git history and previously published build artifacts are separate records.

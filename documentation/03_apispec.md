@@ -1,4 +1,4 @@
-# API Specification
+# Passworthy API Specification
 
 The Worker exposes JSON REST endpoints through Hono and publishes generated OpenAPI
 documentation at:
@@ -75,7 +75,7 @@ Response:
   "success": true,
   "result": {
     "message": "Address claimed successfully",
-    "email_address": "recipient@barid.site"
+    "email_address": "recipient@example.test"
   }
 }
 ```
@@ -142,7 +142,7 @@ Response:
     {
       "id": "usm2sw0qfv9a5ku9z4xmh8og",
       "from_address": "sender@example.com",
-      "to_address": "recipient@barid.site",
+      "to_address": "recipient@example.test",
       "subject": "Welcome to our service",
       "received_at": 1753317948
     }
@@ -232,7 +232,7 @@ Response:
   "result": {
     "id": "usm2sw0qfv9a5ku9z4xmh8og",
     "from_address": "sender@example.com",
-    "to_address": "recipient@barid.site",
+    "to_address": "recipient@example.test",
     "subject": "Welcome to our service",
     "received_at": 1753317948,
     "html_content": "<p>Hello world</p>",
@@ -271,6 +271,9 @@ Response:
 
 ## Domains
 
+The allowlist comes from the `EMAIL_DOMAINS` Worker secret. The addresses below are reserved
+examples, not production configuration. A missing allowlist returns an empty list.
+
 ### List Supported Domains
 
 ```http
@@ -284,7 +287,7 @@ Response:
 ```json
 {
   "success": true,
-  "result": ["barid.site", "vwh.sh"]
+  "result": ["example.test", "mail.example.test"]
 }
 ```
 
@@ -300,11 +303,11 @@ Public endpoint. Returns service health status.
 
 ## Inbound Email Behavior
 
-Cloudflare Email Routing invokes the Worker for inbound email. The Worker checks the recipient
+Cloudflare Email Routing invokes the Worker for inbound email. The Worker checks the runtime domain allowlist and recipient
 claim before parsing the raw message:
 
 - Claimed recipient: parse email, store it in D1, then optionally forward it to the webhook.
-- Unclaimed recipient: discard the message. It is not parsed, stored, or forwarded.
+- Unsupported domain or unclaimed recipient: discard the message. It is not parsed, stored, or forwarded.
 
 Incoming attachments are ignored.
 
@@ -327,7 +330,7 @@ Payload:
 {
   "id": "usm2sw0qfv9a5ku9z4xmh8og",
   "from_address": "sender@example.com",
-  "to_address": "recipient@barid.site",
+  "to_address": "recipient@example.test",
   "subject": "Welcome to our service",
   "received_at": 1753317948,
   "html_content": "<p>Hello world</p>",

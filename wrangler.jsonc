@@ -1,7 +1,3 @@
-/**
- * Production account and D1 database provisioned through Cloudflare MCP.
- * Keep credentials in Worker secrets, never in this file.
- */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "temp-mail",
@@ -10,9 +6,6 @@
 	"compatibility_date": "2025-07-15",
 	"workers_dev": true,
 	"preview_urls": false,
-	"routes": [
-		{ "pattern": "api.0357000.xyz", "custom_domain": true }
-	],
 	"observability": {
 		"enabled": true
 	},
@@ -24,11 +17,15 @@
 		}
 	],
 	"triggers": {
-		"crons": ["0 */2 * * *"]
+		"crons": [
+			"0 */2 * * *"
+		]
 	},
 	"vars": {
 		"TELEGRAM_LOG_ENABLE": false,
 		"HOURS_TO_DELETE_D1": 3
 	},
-	"placement": { "mode": "smart" }
+	"placement": {
+		"mode": "smart"
+	}
 }

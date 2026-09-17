@@ -1,5 +1,4 @@
 import { z } from "@hono/zod-openapi";
-import { DOMAINS_SET } from "@/config/domains";
 
 // Parameter schemas
 export const emailAddressParamSchema = z.object({
@@ -55,7 +54,7 @@ export const emailSchema = z
 		}),
 		to_address: z.string().openapi({
 			description: "The recipient's email address.",
-			example: "recipient@barid.site",
+			example: "recipient@example.test",
 		}),
 		subject: z.string().nullable().openapi({
 			description: "The subject of the email.",
@@ -88,7 +87,7 @@ export const emailSummarySchema = z
 		}),
 		to_address: z.string().openapi({
 			description: "The recipient's email address.",
-			example: "recipient@barid.site",
+			example: "recipient@example.test",
 		}),
 		subject: z.string().nullable().openapi({
 			description: "The subject of the email.",
@@ -207,7 +206,7 @@ export const claimSuccessResponseSchema = z
 			}),
 			email_address: z.string().openapi({
 				description: "The claimed email address.",
-				example: "recipient@barid.site",
+				example: "recipient@example.test",
 			}),
 		}),
 	})
@@ -255,7 +254,7 @@ export const domainsSuccessResponseSchema = z
 		}),
 		result: z.array(z.string()).openapi({
 			description: "A list of supported domains.",
-			example: Array.from(DOMAINS_SET),
+			example: ["example.test"],
 		}),
 	})
 	.openapi("DomainsSuccessResponse");
@@ -279,7 +278,7 @@ export const domainErrorResponseSchema = z
 		note: z.object({
 			supported_domains: z.array(z.string()).openapi({
 				description: "A list of supported domains.",
-				example: Array.from(DOMAINS_SET),
+				example: ["example.test"],
 			}),
 		}),
 	})

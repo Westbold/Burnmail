@@ -1,18 +1,15 @@
-import { DOMAINS_SET } from "@/config/domains";
+import { type DomainConfig, getDomains } from "@/config/domains";
 import { ERR } from "@/utils/http";
 import { getDomain } from "@/utils/mail";
 
-/**
- * Validate email domain after Zod validation
- * Returns validation result with error if invalid
- */
-export function validateEmailDomain(emailAddress: string) {
-	const domain = getDomain(emailAddress);
-	if (!DOMAINS_SET.has(domain)) {
+/** Validate the recipient against this request's runtime allowlist. */
+export function validateEmailDomain(emailAddress: string, env: DomainConfig) {
+	const domains = getDomains(env);
+	if (!domains.includes(getDomain(emailAddress).toLowerCase())) {
 		return {
 			valid: false,
 			error: ERR("Domain not supported", "DomainError", {
-				supported_domains: Array.from(DOMAINS_SET),
+				supported_domains: domains,
 			}),
 		};
 	}

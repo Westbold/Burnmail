@@ -3,8 +3,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 
 // Configuration imports
-import { CACHE } from "@/config/constants";
-import { DOMAINS_SET } from "@/config/domains";
+import { getDomains } from "@/config/domains";
 
 // Database imports
 import { createDatabaseService } from "@/database";
@@ -72,7 +71,7 @@ async function authorizeClaim(
 emailRoutes.openapi(claimAddressRoute, async (c) => {
 	const { emailAddress } = c.req.valid("param");
 
-	const domainValidation = validateEmailDomain(emailAddress);
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
 	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
 
 	const authorization = await getAuthorizationHash(c);
@@ -105,7 +104,7 @@ emailRoutes.openapi(claimAddressRoute, async (c) => {
 emailRoutes.openapi(releaseAddressClaimRoute, async (c) => {
 	const { emailAddress } = c.req.valid("param");
 
-	const domainValidation = validateEmailDomain(emailAddress);
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
 	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
 
 	const authorization = await getAuthorizationHash(c);
@@ -140,7 +139,7 @@ emailRoutes.openapi(getEmailsRoute, async (c) => {
 	const { emailAddress } = c.req.valid("param");
 	const { limit, offset } = c.req.valid("query");
 
-	const domainValidation = validateEmailDomain(emailAddress);
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
 	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
 
 	const authorization = await getAuthorizationHash(c);
@@ -165,7 +164,7 @@ emailRoutes.openapi(getEmailsRoute, async (c) => {
 emailRoutes.openapi(getEmailsCountRoute, async (c) => {
 	const { emailAddress } = c.req.valid("param");
 
-	const domainValidation = validateEmailDomain(emailAddress);
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
 	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
 
 	const authorization = await getAuthorizationHash(c);
@@ -190,7 +189,7 @@ emailRoutes.openapi(getEmailsCountRoute, async (c) => {
 emailRoutes.openapi(deleteEmailsRoute, async (c) => {
 	const { emailAddress } = c.req.valid("param");
 
-	const domainValidation = validateEmailDomain(emailAddress);
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
 	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
 
 	const authorization = await getAuthorizationHash(c);
@@ -266,9 +265,8 @@ emailRoutes.openapi(deleteEmailRoute, async (c) => {
 });
 
 emailRoutes.openapi(getDomainsRoute, async (c) => {
-	c.header("Cache-Control", `public, max-age=${CACHE.DOMAINS_TTL}`);
-	c.header("ETag", `"domains-${DOMAINS_SET.size}"`);
-	return c.json(OK(Array.from(DOMAINS_SET)));
+	c.header("Cache-Control", "no-store");
+	return c.json(OK(getDomains(c.env)));
 });
 
 export default emailRoutes;

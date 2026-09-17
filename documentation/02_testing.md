@@ -1,145 +1,48 @@
 # Testing
 
-This repo uses Bun for tests, Biome for formatting and linting, and TypeScript for type checks.
-
-## Install Test Dependencies
+## Credential-free checks
 
 ```bash
-bun install
-```
-
-## Run All Tests
-
-```bash
+bun install --frozen-lockfile
 bun test
-```
-
-Current tests cover:
-
-- Claim authorization header parsing and key hashing
-- Webhook body serialization and HMAC-SHA512 signature format
-- Claim route behavior, including idempotent claims and conflict rejection
-- Protected inbox access with matching and mismatched bearer keys
-- Claim release deleting stored address email data
-- Inbound unclaimed email discard before parsing or webhook delivery
-
-## Run Targeted Tests
-
-```bash
-bun test src/utils/auth.test.ts
-bun test src/utils/webhook.test.ts
-bun test src/routes/emailRoutes.test.ts
-bun test src/handlers/emailHandler.test.ts
-```
-
-Run the critical access-control and webhook tests together:
-
-```bash
-bun test \
-  src/utils/auth.test.ts \
-  src/utils/webhook.test.ts \
-  src/routes/emailRoutes.test.ts \
-  src/handlers/emailHandler.test.ts
-```
-
-## Static Checks
-
-Run Biome checks:
-
-```bash
-bun run check
-```
-
-Run TypeScript without emitting files:
-
-```bash
 bun run tsc
-```
-
-Format source files:
-
-```bash
-bun run format
-```
-
-Run the full practical verification set:
-
-```bash
 bun run check
-bun run tsc
-bun test
-git diff --check
+bun run deploy --dry-run --outdir dist
 ```
 
-## Knip
+The test suite uses reserved fixture domains and in-memory database doubles. It exercises
+claims, bearer-key hashing, access control, claim release, webhook signatures, unclaimed
+mail discard, runtime domain parsing, per-environment isolation, and missing-config denial.
+Dry-run builds do not require a live hostname or Cloudflare credential.
 
-The repo includes a Knip script:
+## Live smoke test
 
-```bash
-bun run knip
-```
+Set `API_BASE_URL` privately, then run `bun run smoke`. Alternatively, provide `API_HOSTNAME`
+as a private environment variable. The script checks HTTPS, D1 health, the runtime domain
+allowlist, public MX records, and same-origin OpenAPI documentation. When `EMAIL_DOMAINS`
+is provided, the returned allowlist must match that private expected value.
 
-At the time this documentation was written, Knip is not configured to treat Bun test files as
-entry points, so it may report test files and test-only exports as unused. Use `bun run check`,
-`bun run tsc`, and `bun test` as the primary verification suite unless Knip configuration is
-updated.
+It then creates a random temporary claim, exercises correct/missing/wrong-key authorization,
+checks idempotency and competing claims, and deletes the test claim in a cleanup block.
+Recipient addresses, bearer keys, and API response bodies are not logged.
 
-## Manual API Smoke Test
+Real deployments run this script automatically after upload. The optional GitHub
+**Production Smoke Test** workflow reads the deployment URL from an Actions secret named
+`SMOKE_BASE_URL`; it never contains a hostname in YAML. Without that secret, use the
+Cloudflare post-deploy check or run the script from a privately configured shell.
 
-After a local or deployed Worker is available, set:
+A failure after deployment does not roll back the Worker automatically. Inspect private
+Cloudflare logs and use [the verification checklist](05_pending_verification.md).
 
-```bash
-export API_BASE="https://YOUR_WORKER_HOST"
-export CLAIM_KEY="local-test-secret"
-export ADDRESS="recipient@barid.site"
-```
+## External delivery is a separate check
 
-On PowerShell:
+Smoke tests do not send external email. Claim an address, send a unique message from an
+independent mailbox, and verify the subject and body through the authenticated inbox API.
+Release the test claim after checking. Never treat a green build or health endpoint as
+proof of external SMTP delivery.
 
-```powershell
-$env:API_BASE = "https://YOUR_WORKER_HOST"
-$env:CLAIM_KEY = "local-test-secret"
-$env:ADDRESS = "recipient@barid.site"
-```
+## Webhook verification
 
-Claim the address:
-
-```bash
-curl -X PUT "$API_BASE/claims/$ADDRESS" \
-  -H "Authorization: Bearer $CLAIM_KEY"
-```
-
-Check the inbox:
-
-```bash
-curl "$API_BASE/emails/$ADDRESS" \
-  -H "Authorization: Bearer $CLAIM_KEY"
-```
-
-Verify mismatched keys are denied:
-
-```bash
-curl "$API_BASE/emails/$ADDRESS" \
-  -H "Authorization: Bearer wrong-key"
-```
-
-Release the claim:
-
-```bash
-curl -X DELETE "$API_BASE/claims/$ADDRESS" \
-  -H "Authorization: Bearer $CLAIM_KEY"
-```
-
-## Webhook Signature Test Vector
-
-The webhook helper test verifies this exact body:
-
-```json
-{"id":"email_1","from_address":"sender@example.com","to_address":"inbox@barid.site","subject":"Hello","received_at":1753317948,"html_content":"<p>Hello</p>","text_content":"Hello"}
-```
-
-With secret `top-secret`, the expected header is:
-
-```text
-X-Webhook-Signature: HMAC-SHA512=9VAQx2i2p4oJbVYCofgUF0IcVqZjqB3OvAZKPW8dLxWmQr+bzEaWAK8tst0+IAGUK4IIp2S8hMB+fpaxyRPUXQ==
-```
+Verify `X-Webhook-Signature` against the exact received UTF-8 request body using HMAC-SHA512
+and the shared webhook secret. Do not parse and reserialize JSON before checking its
+signature. Use constant-time signature comparison in the webhook consumer.
