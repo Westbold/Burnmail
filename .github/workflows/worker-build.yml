@@ -1,0 +1,48 @@
+name: Worker Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun test
+
+      - name: Check TypeScript
+        run: bun run tsc
+
+      - name: Build Worker without deploying
+        run: bun run deploy --dry-run --outdir dist
+
+      - name: Save deployable bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: temp-mail-worker-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
