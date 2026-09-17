@@ -56,6 +56,15 @@ jobs:
           }
           for name, sha in overrides.items():
               pathlib.Path(name).write_bytes(blob(sha))
+          fixes = [
+              ("scripts/deploy.ts", 'fileURLToPath(new URL("../", import.meta.url))', 'fileURLToPath(new URL("../", import.meta.url).href)'),
+              ("src/config/domains.test.ts", 'expect(await response.json()).toEqual(', 'expect((await response.json()) as { success: boolean; result: string[] }).toEqual('),
+          ]
+          for name, before, after in fixes:
+              path = pathlib.Path(name)
+              text = path.read_text()
+              assert before in text
+              path.write_text(text.replace(before, after))
           pathlib.Path(".github/workflows/maintenance-validate.yml").unlink()
           print(f"Applied {len(entries)} prepared source changes")
       - name: Install locked dependencies
