@@ -1,297 +1,155 @@
-# Temp Mail Worker
+# Passworthy Temp Email
 
-Cloudflare Worker that acts as a temporary email inbox.
+Claim-based temporary inboxes for Passworthy. A Cloudflare Worker receives inbound mail,
+stores messages in D1, and exposes an authenticated HTTP API for reading and deleting them.
 
-**API documentation:** [https://api.driftz.net](https://api.driftz.net)
+**Claim first, receive second.** Mail for an unclaimed or unsupported address is discarded
+before parsing, storage, or webhook delivery. Claims persist until explicitly released;
+messages are temporary. This is an inbound-email service, not an SMTP sending account.
 
-AI-made web client: [https://driftz.net](https://driftz.net)
+## How it works
 
-## Table of Contents
+1. Choose an address on a configured receiving domain and claim it with a strong bearer key.
+2. Cloudflare Email Routing sends incoming messages to the Worker. Claimed recipients are
+   stored in D1; optional webhook forwarding happens after storage.
+3. Read, count, or delete messages using the same key. Release the claim to delete its mail
+   and make the address available again.
 
-*   [Features](#features)
-*   [Supporters](#supporters)
-*   [Community](#community-built-stuff)
-*   [Setup Guide](#setup-guide)
-    *   [Prerequisites](#prerequisites)
-    *   [Project Setup](#project-setup)
-    *   [Cloudflare Configuration](#cloudflare-configuration)
-        *   [D1 Database Setup](#d1-database-setup)
-        *   [Email Routing Setup](#email-routing-setup)
-*   [Running the Worker](#running-the-worker)
-    *   [Cloudflare Information Script (Optional)](#cloudflare-information-script-optional)
-    *   [Telegram Logging (Optional)](#telegram-logging-optional)
-    *   [Address Claims and Authorization](#address-claims-and-authorization)
-    *   [Webhook Forwarding (Optional)](#webhook-forwarding-optional)
-    *   [Local Development](#local-development)
-    *   [Deployment](#deployment)
+The key is hashed before storage. Repeating a claim with the same key is idempotent; a
+competing key receives `409 Conflict`. Claims are first-come, first-served: the prototype
+does not have a separate administrator approval gate. Keep claim keys in your secret store.
 
----
+## API quick start
 
-## Features
-
-*   Receives emails via Cloudflare Email Routing.
-*   Stores email data in a Cloudflare D1 database.
-*   Lets users permanently claim supported email addresses with a bearer key.
-*   Discards inbound email for unclaimed addresses.
-*   Provides authorized API endpoints for email inbox management.
-*   Optionally forwards stored emails to a signed centralized webhook.
-*   Automatically cleans up old emails.
-*   Ignores incoming email attachments.
-
-## Supporters
-
-A big thank you to individuals who have donated domains to support this project. Your contributions help keep this service running.
-
-| Domain | Donated by |
-| --- | --- |
-| `barid.site` | [vwh](https://github.com/vwh) |
-| `vwh.sh` | [vwh](https://github.com/vwh) |
-| `iusearch.lol` | [vwh](https://github.com/vwh) |
-| `lifetalk.us` | [mm6x](https://github.com/mm6x) |
-| `z44d.pro` | [z44d](https://github.com/z44d) |
-| `wael.fun` | [blockton](https://github.com/blockton) |
-| `tawbah.site` | [HprideH](https://github.com/HprideH) |
-| `kuruptd.ink` | [HprideH](https://github.com/HprideH) |
-| `oxno1.space` | [oxno1](https://github.com/oxno1) |
-| `hacktivc.com` | None |
-| `lealaom.xyz` | None |
-| `leala.site` | None |
-
-### How to Donate a Domain
-
-If you have an unused domain and would like to contribute, you can donate it by following these steps:
-
-1.  **Create a Pull Request**: Add your domain and owner information to `config/domains.ts` file in `src` directory.
-2.  **Nameserver Provisioning**: After your pull request, we will provide you with nameservers to update for your domain.
-
----
-
-## Community
-
-Here are some projects built by the community using or integrating with Temp Mail Worker:
-
-*   **Rust Library**: [doomed-neko/tmapi](https://github.com/doomed-neko/tmapi/)
-*   **Go Library**: [blockton/barid](https://github.com/blockton/barid)
-*   **Python Library**: [superhexa/barid-client](https://github.com/superhexa/barid-client)
-*   **CLI App**: [doomed-neko/tmcli](https://github.com/doomed-neko/tmcli)
-
----
-
-## Setup Guide
-
-### Prerequisites
-
-Before you begin, ensure you have following:
-
-*   **Bun**: Installed on your system.
-*   **Cloudflare Account**: With access to Workers, Email Routing, and D1.
-
-### Project Setup
-
-1.  **Install Dependencies**: Install necessary JavaScript dependencies.
-    ```bash
-    bun install
-    ```
-
-2.  **Login to Cloudflare**: You need to log in to your Cloudflare account via Wrangler. This will open a browser for authentication.
-    ```bash
-    bun wrangler login
-    ```
-
-### Cloudflare Configuration
-
-#### D1 Database Setup
-
-1.  **Create** D1 database**:
-    ```bash
-    bun run db:create
-    ```
-2.  **Copy** `database_id`: From output of above command.
-3.  **Update** `wrangler.jsonc`: Open `wrangler.jsonc` and replace `database_id` with `database_id` you just copied.
-4.  **Apply Database Schema**:
-    ```bash
-    bun run db:tables
-    ```
-5.  **Apply Database Indexes**:
-    ```bash
-    bun run db:indexes
-    ```
-
-#### Email Routing Setup
-
-1.  **Go to your Cloudflare Dashboard**: Select your domain (`example.com`).
-2.  **Navigate to "Email" -> "Email Routing"**.
-3.  **Enable Email Routing** if it's not already enabled.
-4.  **Create a Catch-all Rule**:
-    *   For "Action", choose "Send to Worker".
-    *   Select your Worker (e.g., `temp-mail`).
-    *   Click "Save".
-
-## Running the Worker
-
-### Cloudflare Information Script (Optional)
-
-To check your Cloudflare Workers, D1 databases, and domain information directly from your terminal, you can use the `cf-info` script.
-
-1.  **Configure API Credentials**: Add your Cloudflare Account ID and an API Token with appropriate permissions (e.g., `Zone:Read`, `Worker Scripts:Read`, `D1:Read`, `Zone:Email:Read`) to your `.dev.vars` file.
-
-    Example `.dev.vars` additions:
-    ```
-    CLOUDFLARE_ACCOUNT_ID="YOUR_CLOUDFLARE_ACCOUNT_ID"
-    CLOUDFLARE_API_TOKEN="YOUR_CLOUDFLARE_API_TOKEN"
-    ```
-
-2.  **Run** Script**:
-    ```bash
-    bun run cf-info
-    ```
-
-### Telegram Logging (Optional)
-
-If you wish to enable Telegram logging for your worker, follow these steps:
-
-1.  **Enable Logging in `wrangler.jsonc`**: Ensure `TELEGRAM_LOG_ENABLE` is set to `true` in your `wrangler.jsonc` file under `vars` section.
-
-2.  **Local Development (`.dev.vars`)**: For local development, create a `.dev.vars` file in your project root with your Telegram bot token and chat ID. This file is used by `bun dev`.
-
-    Example `.dev.vars`:
-    ```
-    TELEGRAM_BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
-    TELEGRAM_CHAT_ID="YOUR_TELEGRAM_CHAT_ID"
-    ```
-
-3.  **Production Deployment (Secrets)**: For production, you must set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` as secrets using `wrangler`. This securely stores your sensitive information with Cloudflare.
-
-    Run following commands in your terminal and enter respective values when prompted:
-    ```bash
-    bun wrangler secret put TELEGRAM_BOT_TOKEN
-    bun wrangler secret put TELEGRAM_CHAT_ID
-    ```
-
-### Address Claims and Authorization
-
-Users must claim an address before it can receive email. The claim key is supplied as a bearer token:
-
-```text
-Authorization: Bearer YOUR_CLAIM_KEY
-```
-
-Claim an address:
-
-```http
-PUT /claims/recipient@barid.site
-Authorization: Bearer YOUR_CLAIM_KEY
-```
-
-Claims are permanent and do not expire. Calling the same claim endpoint again with the same bearer token is idempotent. Calling it with a different bearer token returns `409 Conflict`.
-
-All email and inbox endpoints require the same bearer token that claimed the recipient address. Requests with a missing token, unclaimed address, or mismatched token are denied.
-
-Release a claim and delete all stored email for that address:
-
-```http
-DELETE /claims/recipient@barid.site
-Authorization: Bearer YOUR_CLAIM_KEY
-```
-
-Inbound email for unclaimed addresses is discarded and is not stored or forwarded to the webhook. Webhook delivery is centralized and does not use per-address claim authorization.
-
-### Webhook Forwarding (Optional)
-
-Set `WEBHOOK_URL` and `WEBHOOK_SECRET` to forward every stored email to an external webhook. If either value is missing, webhook forwarding is disabled.
-
-For production, set both values as Worker secrets:
+Set `API_BASE_URL` and `EMAIL_ADDRESS` privately in your shell or secret manager. This
+repository intentionally does not contain live receiving domains or deployment hostnames.
+Examples in the detailed docs use reserved test addresses, not working inboxes.
 
 ```bash
-bun wrangler secret put WEBHOOK_URL
-bun wrangler secret put WEBHOOK_SECRET
+: "${API_BASE_URL:?Set the deployment URL privately}"
+: "${EMAIL_ADDRESS:?Set the recipient address privately}"
+CLAIM_KEY="$(openssl rand -hex 32)"
+
+# Claim before sending any email to this address.
+curl --fail-with-body -X PUT "$API_BASE_URL/claims/$EMAIL_ADDRESS" \
+  -H "Authorization: Bearer $CLAIM_KEY"
+
+# After sending a message from another mailbox, list its summary.
+curl --fail-with-body "$API_BASE_URL/emails/$EMAIL_ADDRESS" \
+  -H "Authorization: Bearer $CLAIM_KEY"
+
+# Retrieve the body using an id returned by the list endpoint.
+curl --fail-with-body "$API_BASE_URL/inbox/EMAIL_ID" \
+  -H "Authorization: Bearer $CLAIM_KEY"
 ```
 
-For local development, add them to `.dev.vars`:
-
-```text
-WEBHOOK_URL="https://example.com/webhooks/temp-mail"
-WEBHOOK_SECRET="YOUR_SHARED_SECRET"
-```
-
-The Worker sends a `POST` request with `Content-Type: application/json` and this header:
-
-```text
-X-Webhook-Signature: HMAC-SHA512=<base64_hmac_sha512_of_body>
-```
-
-The signature is computed over the exact UTF-8 request body using `WEBHOOK_SECRET`. Webhook failures are logged but do not reject or delete the received email.
-
-Webhook body shape:
-
-```json
-{
-  "id": "usm2sw0qfv9a5ku9z4xmh8og",
-  "from_address": "sender@example.com",
-  "to_address": "recipient@barid.site",
-  "subject": "Welcome to our service",
-  "received_at": 1753317948,
-  "html_content": "<p>Hello world</p>",
-  "text_content": "Hello world"
-}
-```
-
-### Local Development
-
-To run worker locally:
+Save `CLAIM_KEY` before closing the shell. There is no key-recovery API. Use the same key to
+release an address and delete all of its stored messages:
 
 ```bash
-bun run dev
+curl --fail-with-body -X DELETE "$API_BASE_URL/claims/$EMAIL_ADDRESS" \
+  -H "Authorization: Bearer $CLAIM_KEY"
 ```
 
-### Deployment
+The deployment serves interactive documentation at `/`, Swagger UI at `/swagger`, and its
+OpenAPI document at `/openapi.json`. The API explorer uses the current origin.
 
-To deploy your worker to Cloudflare:
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `PUT` | `/claims/{emailAddress}` | Claim an address; requires a bearer key |
+| `DELETE` | `/claims/{emailAddress}` | Release the claim and delete its messages |
+| `GET` | `/emails/{emailAddress}` | List summaries, newest first; `limit` and `offset` supported |
+| `GET` | `/emails/count/{emailAddress}` | Count messages |
+| `DELETE` | `/emails/{emailAddress}` | Delete messages without releasing the claim |
+| `GET` | `/inbox/{emailId}` | Retrieve a complete stored message |
+| `DELETE` | `/inbox/{emailId}` | Delete one message |
+| `GET` | `/domains` | Read the runtime receiving-domain allowlist; public |
+| `GET` | `/health` | Check Worker and database health; public |
+
+Except for the two public endpoints and documentation, requests require
+`Authorization: Bearer <claim-key>`. See [the API specification](documentation/03_apispec.md)
+for response shapes and error behavior.
+
+## Configuration stays outside Git
+
+| Setting | Location | Purpose |
+| --- | --- | --- |
+| `EMAIL_DOMAINS` | Cloudflare Worker secret | Comma-separated receiving domains; no hard-coded fallback |
+| `API_HOSTNAME` | Cloudflare Builds secret | Custom API hostname inserted only into a temporary deploy config |
+| `EMAIL_DOMAINS` | Cloudflare Builds secret | Matches the runtime allowlist for source audits and post-deploy verification |
+| `D1` | Wrangler binding | Message and claim database |
+| `HOURS_TO_DELETE_D1` | Wrangler variable | Message retention threshold; currently `3` |
+| `TELEGRAM_LOG_ENABLE` | Wrangler variable | Optional operational logging; disabled by default |
+| `WEBHOOK_URL`, `WEBHOOK_SECRET` | Worker secrets | Optional centralized webhook destination and signing key |
+
+Live domains and API hostnames must not be committed in code, tests, workflows, documentation,
+or examples. Do not encode them into source as a workaround. Local `.env` and `.dev.vars`
+files and generated deployment configs are ignored. Public DNS and `/domains` remain public;
+keeping values out of Git is not a claim that the running service conceals them.
+
+## Development and deployment
+
+Requires Bun. Install the locked dependencies, then run checks without Cloudflare credentials:
 
 ```bash
-bun run deploy
+bun install --frozen-lockfile
+bun test
+bun run tsc
+bun run check
+bun run deploy --dry-run --outdir dist
 ```
 
-## Available Scripts
+Tests use reserved fixture domains and do not depend on production configuration. For local
+Worker development, copy `.dev.vars.example` to `.dev.vars` and set the desired test allowlist.
+`bun run dev` uses Wrangler's **remote** development mode; it is not an isolated local database.
+See [setup](documentation/01_setup.md) before using live resources.
 
-### Development & Deployment
-- `bun run dev` - Start local development server
-- `bun run deploy` - Deploy to Cloudflare Workers
-- `bun run tail` - View live logs from deployed worker
+Production pushes to `main` are deployed by Cloudflare Builds. The build command runs locked
+installation, tests, and TypeScript checks. `bun run deploy` then audits tracked files for
+private configuration, injects the custom hostname into an ignored temporary config, deploys,
+deletes that config, and runs live API/DNS smoke tests. The existing D1 binding and mail
+routing are retained. A post-deploy smoke-test failure reports a failed build but does not
+automatically roll back the deployed version.
 
-### Database Management
-- `bun run db:create` - Create D1 database
-- `bun run db:tables` - Apply database schema
-- `bun run db:indexes` - Apply database indexes
+For a fresh installation, follow [the deployment runbook](documentation/04_cloudflare_deployment.md).
+Do not recreate an existing database. Production secrets are managed in Cloudflare, not in
+the repository. The separate GitHub **Worker Build** workflow tests and bundles code; it is
+not the production deployment mechanism.
 
-### Code Quality
-- `bun run check` - Run Biome checks
-- `bun run lint` - Run Biome linting
-- `bun run lint:fix` - Fix linting issues
-- `bun run format` - Format code with Biome
-- `bun run tsc` - Run TypeScript compiler
+## Retention and delivery behavior
 
-### Utilities
-- `bun run cf-info` - Display Cloudflare account information
-- `bun run cf-typegen` - Generate TypeScript types for Cloudflare bindings
+Cleanup runs every two hours and deletes messages older than the configured retention
+threshold. With the current three-hour threshold, deletion happens on a later cleanup run,
+not at the exact three-hour mark. Claims do not expire. Attachments are not stored.
 
-## API Endpoints
+Webhook forwarding is enabled only when both webhook secrets are set. Each stored message
+is sent as JSON with `X-Webhook-Signature: HMAC-SHA512=<base64 signature>`, computed over the
+exact UTF-8 request body. Delivery failures are logged without deleting the stored message;
+there is no durable webhook retry queue. See [webhook details](documentation/03_apispec.md#webhook-delivery).
 
-### Email Endpoints
+Treat message HTML as untrusted content in clients; the server's basic content cleanup is
+not a substitute for safe rendering. A successful health check does not prove that a real
+external email has traversed DNS, routing, and storage.
 
-- `PUT /claims/{emailAddress}` - Permanently claim a supported address with `Authorization: Bearer <key>`
-- `DELETE /claims/{emailAddress}` - Release a claim and delete all stored email for that address
-- `GET /emails/{emailAddress}` - Get emails for a claimed address
-- `GET /emails/count/{emailAddress}` - Get email count for a claimed address
-- `GET /inbox/{emailId}` - Get a specific email by ID
-- `DELETE /emails/{emailAddress}` - Delete all emails for a claimed address
-- `DELETE /inbox/{emailId}` - Delete a specific email by ID
-- `GET /domains` - Get list of supported domains
+## Project layout
 
-All claim, email, and inbox endpoints require `Authorization: Bearer <key>`. `/domains` and `/health` are public.
+```text
+src/config/       Runtime configuration and constants
+src/database/     D1 queries and service layer
+src/handlers/     Incoming email and scheduled cleanup
+src/routes/       HTTP endpoints and claim authorization
+src/schemas/      Validation and OpenAPI schemas
+src/utils/        Authentication, content processing, logging, webhooks
+scripts/          Private-config deployment and live smoke tests
+sql/              Database schema and indexes
+documentation/    Setup, API reference, deployment, and verification
+```
 
-### Health Check
+See [testing](documentation/02_testing.md) and [verification](documentation/05_pending_verification.md)
+for repeatable checks and the external email-delivery test.
 
-- `GET /health` - Service health status
+## License and attribution
 
-For complete API documentation with examples, visit: [https://api.barid.site](https://api.barid.site)
+MIT; see [LICENSE](LICENSE). This project is derived from `vwh/temp-mail`. The original
+copyright notice is preserved. Upstream hosted services, donated domains, and third-party
+clients are not part of this deployment.

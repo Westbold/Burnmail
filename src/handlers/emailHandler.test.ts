@@ -16,12 +16,15 @@ describe("email handler access control", () => {
 		let waitUntilCalls = 0;
 		const message = {
 			from: "sender@example.com",
-			to: "recipient@barid.site",
+			to: "recipient@example.test",
 			get raw() {
 				throw new Error("unclaimed email should not be parsed");
 			},
 		} as unknown as ForwardableEmailMessage;
-		const env = { D1: new UnclaimedAddressD1() as unknown as D1Database } as CloudflareBindings;
+		const env = {
+			D1: new UnclaimedAddressD1() as unknown as D1Database,
+			EMAIL_DOMAINS: "example.test",
+		} as CloudflareBindings;
 		const ctx = {
 			waitUntil: () => {
 				waitUntilCalls++;

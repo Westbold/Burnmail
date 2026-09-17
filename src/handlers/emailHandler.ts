@@ -1,9 +1,10 @@
 import { createId } from "@paralleldrive/cuid2";
 import PostalMime from "postal-mime";
+import { getDomains } from "@/config/domains";
 import * as db from "@/database/d1";
 import { emailSchema } from "@/schemas/emails";
 import { now } from "@/utils/helpers";
-import { processEmailContent } from "@/utils/mail";
+import { getDomain, processEmailContent } from "@/utils/mail";
 import { PerformanceTimer } from "@/utils/performance";
 import { sendEmailWebhook } from "@/utils/webhook";
 
@@ -16,6 +17,8 @@ export async function handleEmail(
 	ctx: ExecutionContext,
 ) {
 	try {
+		if (!getDomains(env).includes(getDomain(message.to).toLowerCase())) return;
+
 		const timer = new PerformanceTimer("email-processing");
 		const emailId = createId();
 		const { result: claim, error: claimError } = await db.getClaimByEmailAddress(

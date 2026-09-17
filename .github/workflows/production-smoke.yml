@@ -2,113 +2,23 @@ name: Production Smoke Test
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: [.github/workflows/production-smoke.yml]
 
 permissions:
   contents: read
 
 jobs:
-  dns:
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - name: Compare authoritative and recursive DNS
-        shell: bash
-        run: |
-          set -euo pipefail
-          for resolver in darwin.ns.cloudflare.com pola.ns.cloudflare.com 1.1.1.1 8.8.8.8; do
-            echo "=== $resolver ==="
-            dig +time=5 +tries=1 +noall +comments +answer "@$resolver" NS 0357000.xyz
-            dig +time=5 +tries=1 +noall +comments +answer "@$resolver" MX 0357000.xyz
-          done
-          echo '=== Google DNS over HTTPS ==='
-          curl --fail --silent --show-error --max-time 20 'https://dns.google/resolve?name=0357000.xyz&type=MX'
-          echo
-          dig @1.1.1.1 +short MX 0357000.xyz | tee /tmp/mx.txt
-          test "$(grep -c 'mx.cloudflare.net' /tmp/mx.txt)" -eq 3
-          dig @1.1.1.1 +short TXT 0357000.xyz | grep 'include:_spf.mx.cloudflare.net'
-
-  api:
+  smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        host:
-          - temp-mail.westbold-passworthy.workers.dev
-          - api.0357000.xyz
     env:
-      BASE_URL: https://${{ matrix.host }}
+      API_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
     steps:
-      - name: Check HTTPS, claims, and authorization against production
-        shell: python
-        run: |
-          import json
-          import os
-          import secrets
-          import time
-          import urllib.error
-          import urllib.request
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Check privately configured deployment
+        run: bun run smoke
 
-          base = os.environ["BASE_URL"]
-
-          def request(path, method="GET", token=None):
-              headers = {"Accept": "application/json", "User-Agent": "Passworthy-Smoke/1.0"}
-              if token is not None:
-                  headers["Authorization"] = f"Bearer {token}"
-              req = urllib.request.Request(base + path, method=method, headers=headers)
-              try:
-                  response = urllib.request.urlopen(req, timeout=10)
-              except urllib.error.HTTPError as error:
-                  response = error
-              with response:
-                  return response.status, json.loads(response.read())
-
-          for attempt in range(12):
-              try:
-                  status, payload = request("/health")
-                  assert status == 200, (status, payload)
-                  break
-              except (OSError, ValueError, AssertionError) as error:
-                  print(f"Health attempt {attempt + 1}: {error}", flush=True)
-                  if attempt == 11:
-                      raise
-                  time.sleep(5)
-          status, payload = request("/domains")
-          assert status == 200 and payload["result"] == ["0357000.xyz"], payload
-          status, document = request("/openapi.json")
-          assert status == 200
-          assert [server["url"] for server in document["servers"]] == ["/"]
-          print(f"PASS {base}: HTTPS, health, owned domain, same-origin API docs", flush=True)
-
-          address = "smoke-" + secrets.token_hex(10) + "@0357000.xyz"
-          token = secrets.token_urlsafe(32)
-          wrong_token = secrets.token_urlsafe(32)
-          print(f"::add-mask::{token}")
-          claim_path = "/claims/" + address
-          inbox_path = "/emails/" + address
-          claimed = False
-          try:
-              assert request(inbox_path)[0] == 401
-              status, payload = request(claim_path, "PUT", token)
-              assert status == 200, payload
-              claimed = True
-              assert request(claim_path, "PUT", token)[0] == 200
-              assert request(claim_path, "PUT", wrong_token)[0] == 409
-              assert request(inbox_path, token=wrong_token)[0] == 403
-              status, payload = request(inbox_path, token=token)
-              assert status == 200 and payload["result"] == [], payload
-              status, payload = request("/emails/count/" + address, token=token)
-              assert status == 200 and payload["result"]["count"] == 0, payload
-              assert request(claim_path, "DELETE", wrong_token)[0] == 403
-              assert request("/claims/smoke@example.test", "PUT", token)[0] == 404
-              print("PASS real D1: claim, idempotency, conflict, read, count, access denial", flush=True)
-          finally:
-              if claimed:
-                  status, payload = request(claim_path, "DELETE", token)
-                  assert status == 200, payload
-                  print("PASS temporary claim cleanup", flush=True)
-          assert request(inbox_path, token=token)[0] == 404
-          print("PASS released inbox is inaccessible; no test inbox remains", flush=True)
+# Normal production deploys run this same check in Cloudflare Builds automatically.
+# For an optional manual GitHub run, configure SMOKE_BASE_URL as an Actions secret.
