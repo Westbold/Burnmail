@@ -1,37 +1,50 @@
-# Remaining verification and cleanup
+# Remaining verification and completed cleanup
 
 Snapshot: September 17, 2026. See `04_cloudflare_deployment.md` for the deployed resources
 and the working `workers.dev` API. Do not recreate the Worker or D1 database.
 
 ## Public DNS and external delivery
 
-Cloudflare's authoritative servers answer correctly, but the first external checks found
-NXDOMAIN at public resolvers. Registration is active with the expected nameservers.
-The live API passed HTTPS and D1 access-control tests; external SMTP receipt is not yet proven.
+Cloudflare's authoritative servers answered correctly, but the initial external checks found
+NXDOMAIN at public resolvers. Registration was active with the expected nameservers.
+The live API passed HTTPS and D1 access-control tests; external SMTP receipt was not proven
+in those checks. DNS and mail delivery were not retested during the cleanup below.
 
 Run **Actions > Production Smoke Test > Run workflow > main** to repeat DNS and API checks.
 The workflow checks both API hostnames independently. After public MX records resolve, use
 the claim/send/read sequence in the deployment guide for a real external email test.
 A green Worker Build is not a mail-delivery test.
 
-## Unverified test destination: deletion temporarily blocked
+## Test destination cleanup: completed
 
-An automatically generated Cloudflare verification email was requested for:
+The unused verification destination was deleted through Cloudflare MCP at the user's request:
 
 `cfcheck-df05426fb4e243ea@0357000.xyz`
 
-Destination ID: `e14f3218613f4f10ab6032d3e39f4ff8`.
+Deleted destination ID: `e14f3218613f4f10ab6032d3e39f4ff8`.
 
-No email was observed in D1 before the test was ended. The test claim and any test messages
-were removed. The destination-address entry itself is still unverified: Cloudflare rejected
-deletion with error `2032`, `Destination address has been created too recently`.
+Cloudflare returned success with HTTP 200 for the deletion. A subsequent GET for that exact
+ID returned error `2015`, `Address not found`, confirming removal. The earlier temporary
+restriction (`2032`, address created too recently) no longer blocked deletion.
 
-No routing rule forwards to this address. The production catch-all sends directly to the
-`temp-mail` Worker, so the unverified entry is not a production dependency. Do not verify it.
-
-Once Cloudflare permits deletion, open **Compute > Email Service > Email Routing >
-Destination Addresses**, find the exact address above, and delete it. Alternatively delete
-that exact destination ID through Cloudflare MCP. Do not delete the catch-all routing rule.
+The test claim and test messages had already been removed. The production catch-all was
+read back after deletion and remains enabled with action `worker` and value `temp-mail`.
+No production mail-routing rule was deleted or changed. No destination cleanup remains.
 
 The staging Worker, staging database table, and one-time GitHub staging workflow used for the
-initial code upload have already been removed. No Cloudflare API token was stored in GitHub.
+initial code upload were already removed. No Cloudflare API token was stored in GitHub.
+
+## Automatic deployment: authorization still required
+
+A fresh attempt to connect `Westbold/Passworthy-Temp-Email` to Cloudflare Builds returned
+error `8000008`: the repository is disconnected from the Git account. The Worker has no
+build triggers, and the build-token list is empty. Account-token permission discovery also
+returned `9109 Unauthorized`, so this MCP connection cannot provision a build token.
+
+No automatic-deployment trigger was created, and no automated deployment was claimed as
+successful. The existing running Worker and its routing were left intact.
+
+Complete the one-time Cloudflare GitHub authorization under **Workers & Pages > temp-mail >
+Settings > Builds > Connect**, select `Westbold/Passworthy-Temp-Email`, and use the build
+settings already recorded in `04_cloudflare_deployment.md`. Cloudflare's default generated
+build token avoids placing a Cloudflare API token in GitHub source or chat.
