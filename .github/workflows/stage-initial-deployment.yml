@@ -1,0 +1,37 @@
+name: Stage Initial Deployment
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/stage-initial-deployment.yml]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download the tested domain-configured build
+        uses: actions/download-artifact@v4
+        with:
+          name: temp-mail-worker-a9d7572905daba930e11227a0d1b90ce559d47a6
+          run-id: 35267342928
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: bundle
+
+      - name: Verify and transfer the immutable public artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '48b70480ca86d001a77a7b84709f571dc0cfee9b77894a9daf6ad40b28bded2d  bundle/index.js' | sha256sum --check
+          curl --fail-with-body --retry 3 --retry-all-errors --max-time 60 \
+            -X PUT -H 'Content-Type: application/javascript' \
+            --data-binary @bundle/index.js \
+            'https://temp-mail-stage-a9d7572.westbold-passworthy.workers.dev/bundle'
+
+# This one-time endpoint accepts only the exact SHA-256 above and expires in
+# 30 minutes. It cannot deploy code or read inboxes. Both this workflow and
+# the temporary staging Worker/table are removed after the MCP deployment.
