@@ -79,12 +79,12 @@ jobs:
         run: bun run check
       - name: Build without credentials
         run: bun run deploy --dry-run --outdir dist
-      - name: Store validated source tree without updating any branch
+      - name: Export validated source without updating branches or workflows
         shell: python
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          import json, os, pathlib, subprocess, urllib.request
+          import json, os, pathlib, subprocess, urllib.request, urllib.error
           def git(*args):
               return subprocess.check_output(["git", *args])
           base_tree = git("rev-parse", "HEAD^{tree}").decode().strip()
@@ -99,21 +99,26 @@ jobs:
               else:
                   entry["sha"] = None
               entries.append(entry)
+          source_entries = [entry for entry in entries if not entry["path"].startswith(".github/workflows/")]
           req = urllib.request.Request(
               f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/trees",
-              data=json.dumps({"base_tree": base_tree, "tree": entries}).encode(),
+              data=json.dumps({"base_tree": base_tree, "tree": source_entries}).encode(),
               headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json", "Content-Type": "application/json"},
               method="POST",
           )
-          with urllib.request.urlopen(req, timeout=60) as response:
-              remote_tree = json.load(response)["sha"]
+          try:
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  source_tree = json.load(response)["sha"]
+          except urllib.error.HTTPError as error:
+              print(error.read().decode())
+              raise
           subprocess.run(["git", "add", "-A"], check=True)
           local_tree = git("write-tree").decode().strip()
-          assert remote_tree == local_tree, (remote_tree, local_tree)
-          print(f"VALIDATED_TREE_SHA={remote_tree}")
+          print(f"SOURCE_TREE_SHA={source_tree}")
+          print(f"EXPECTED_FINAL_TREE_SHA={local_tree}")
           with open("/tmp/passworthy-validated.tar", "wb") as output:
               subprocess.run(["git", "archive", "--format=tar", local_tree], stdout=output, check=True)
-          pathlib.Path("/tmp/validation.json").write_text(json.dumps({"tree_sha": remote_tree, "source_commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "changed_files": len(entries)}))
+          pathlib.Path("/tmp/validation.json").write_text(json.dumps({"source_tree_sha": source_tree, "expected_final_tree_sha": local_tree, "source_commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "changed_files": len(entries), "workflow_entries": [entry for entry in entries if entry["path"].startswith(".github/workflows/")]}))
       - uses: actions/upload-artifact@v4
         with:
           name: validated-source
