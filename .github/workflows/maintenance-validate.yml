@@ -50,7 +50,12 @@ jobs:
               else:
                   path.parent.mkdir(parents=True, exist_ok=True)
                   path.write_text(entry["content"], encoding="utf-8")
-          pathlib.Path("scripts/smoke.ts").write_bytes(blob("4e88b63927f4c040c49e362b9b10128097be90cd"))
+          overrides = {
+              "scripts/smoke.ts": "4e88b63927f4c040c49e362b9b10128097be90cd",
+              "src/utils/webhook.test.ts": "f49f32b4bc84f2868308ca0205d6366c80dde3a4",
+          }
+          for name, sha in overrides.items():
+              pathlib.Path(name).write_bytes(blob(sha))
           pathlib.Path(".github/workflows/maintenance-validate.yml").unlink()
           print(f"Applied {len(entries)} prepared source changes")
       - name: Install locked dependencies
