@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Passworthy Inbox</title>
+  <link rel="stylesheet" href="/app/styles.css">
+  <script type="module" src="/app/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/app/">PASSWORTHY <span>INBOX</span></a>
+    <a href="/" target="_blank" rel="noopener noreferrer">API docs</a>
+  </header>
+  <main>
+    <section id="login" class="card login">
+      <p class="eyebrow">TEMPORARY MAIL. NOTHING EXTRA.</p>
+      <h1>Your inbox, one key.</h1>
+      <p>Open an existing mailbox, or claim an address before receiving mail.</p>
+      <form id="connect">
+        <fieldset id="credentials">
+          <label for="address">Mailbox address</label>
+          <input id="address" name="address" type="email" autocomplete="off" spellcheck="false" required placeholder="Enter the full email address">
+          <p id="domains" class="hint">Loading receiving domains...</p>
+          <label for="key">Claim key</label>
+          <div class="input-row">
+            <input id="key" name="key" type="password" autocomplete="off" spellcheck="false" required placeholder="The bearer key for this mailbox">
+            <button id="generate" type="button" class="secondary">Generate key</button>
+          </div>
+          <p class="hint">Save your key. There is no password reset or key recovery.</p>
+          <div class="actions">
+            <button type="submit" value="open">Open inbox</button>
+            <button type="submit" value="claim" class="secondary">Claim &amp; open</button>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+
+    <section id="mailbox" hidden>
+      <div class="mailbox-heading">
+        <div><p class="eyebrow">YOUR MAILBOX</p><h1 id="mailbox-address"></h1></div>
+        <div class="actions">
+          <button id="copy-address" type="button" class="secondary">Copy address</button>
+          <button id="copy-link" type="button" class="secondary">Copy access link</button>
+          <button id="close" type="button" class="secondary">Close inbox</button>
+        </div>
+      </div>
+      <p class="hint">Save your access link before leaving. Anyone with it can read, delete, and release this inbox. Closing does not release the claim.</p>
+      <div class="workspace">
+        <section class="card inbox" aria-label="Messages">
+          <div class="toolbar"><h2>Messages</h2><button id="refresh" type="button" class="secondary">Refresh</button></div>
+          <p class="hint">Auto-refresh every 15 seconds on the newest page while this tab is visible.</p>
+          <div id="messages" aria-live="polite"></div>
+          <nav class="pagination" aria-label="Message pages">
+            <button id="previous" type="button" class="secondary" disabled>Newer</button>
+            <span id="page" class="hint"></span>
+            <button id="next" type="button" class="secondary" disabled>Older</button>
+          </nav>
+        </section>
+        <section class="card reader" aria-label="Message reader">
+          <p id="reader-empty" class="empty">Select a message to read it.</p>
+          <article id="message" hidden>
+            <div class="toolbar"><h2 id="subject"></h2><button id="delete" type="button" class="danger">Delete</button></div>
+            <p id="sender" class="hint"></p>
+            <p id="received" class="hint"></p>
+            <p id="body-kind" class="hint"></p>
+            <pre id="body"></pre>
+          </article>
+        </section>
+      </div>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <noscript>This inbox needs JavaScript to call the API. No messages are embedded in this page.</noscript>
+  </main>
+  <footer>Receive only. Messages are temporary; claims persist until released. No attachments.</footer>
+</body>
+</html>
