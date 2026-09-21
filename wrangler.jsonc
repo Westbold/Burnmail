@@ -6,6 +6,11 @@
 	"compatibility_date": "2025-07-15",
 	"workers_dev": true,
 	"preview_urls": false,
+	"assets": {
+		"directory": "./public",
+		"not_found_handling": "none",
+		"run_worker_first": ["/", "/claims/*", "/emails/*", "/inbox/*", "/domains", "/health", "/openapi.json", "/swagger"]
+	},
 	"observability": {
 		"enabled": true
 	},
