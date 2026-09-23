@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 
 /** Check every tracked file without printing private values into build logs. */
 export async function checkPrivateConfig(root: string): Promise<void> {
-	const forbidden = [process.env.API_HOSTNAME, ...(process.env.EMAIL_DOMAINS ?? "").split(",")]
+	const forbidden = [
+		process.env.API_HOSTNAME,
+		process.env.APP_HOSTNAME,
+		process.env.ROOT_HOSTNAME,
+		...(process.env.EMAIL_DOMAINS ?? "").split(","),
+	]
 		.map((value) => value?.trim().toLowerCase())
 		.filter((value): value is string => Boolean(value));
 	const listing = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: root });

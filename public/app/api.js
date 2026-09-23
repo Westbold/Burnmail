@@ -33,16 +33,16 @@ export function generateKey() {
 }
 
 export function accessLink(origin, email, key) {
-  const url = new URL("/app/", origin);
+  const url = new URL("/", origin);
   url.hash = new URLSearchParams({ email, key }).toString();
   return url.href;
 }
 
-export function parseAccessLink(hash) {
-  const values = new URLSearchParams(hash.replace(/^#/, ""));
+export function parseAccessLink(parameters) {
+  const values = new URLSearchParams(parameters.replace(/^[#?]/, ""));
   const email = values.get("email");
   const key = values.get("key");
-  return email && key ? { email, key } : null;
+  return values.getAll("email").length === 1 && values.getAll("key").length === 1 && email && key ? { email, key } : null;
 }
 
 // Deliberately return text, never trusted markup. The UI uses textContent only.
@@ -50,4 +50,24 @@ export function messageBody(message) {
   if (message.text_content) return { label: "Plain text", text: message.text_content };
   if (message.html_content) return { label: "HTML source (not rendered)", text: message.html_content };
   return { label: "Plain text", text: "This message has no stored body." };
+}
+
+// Never combine half a query credential with half a fragment credential.
+export function consumeAccessLink(location, history) {
+  const url = new URL(location.href);
+  const query = new URLSearchParams(url.search);
+  const fragment = new URLSearchParams(url.hash.slice(1));
+  const queryHasCredentials = query.has("email") || query.has("key");
+  const fragmentHasCredentials = fragment.has("email") || fragment.has("key");
+  const linked = queryHasCredentials ? parseAccessLink(url.search) : parseAccessLink(url.hash);
+  if (queryHasCredentials || fragmentHasCredentials) {
+    query.delete("email");
+    query.delete("key");
+    fragment.delete("email");
+    fragment.delete("key");
+    url.search = query.toString();
+    url.hash = fragment.toString();
+    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  return linked;
 }

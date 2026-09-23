@@ -1,132 +1,62 @@
-# Static inbox frontend
+# Burnmail webmail
 
-The browser client is mounted at `/app/` on the **same origin as the existing API**.
-It uses Cloudflare Workers Static Assets, not a second Cloudflare Pages project.
-HTML, CSS, and browser JavaScript are static files. Only API calls execute the
-existing Hono Worker. There is no SSR, frontend server, Pages Function, proxy, or
-new authentication service.
+## Host routing
 
-## Mount and routing
+The private `APP_HOSTNAME` serves the static inbox at `/`. The private `API_HOSTNAME`
+continues to serve API docs at `/`, Swagger at `/swagger`, and OpenAPI at `/openapi.json`.
+The private `ROOT_HOSTNAME` apex and its other subdomains redirect to the app root.
+Unknown paths on the app/API do not get a global SPA fallback.
 
-```text
-Existing deployment origin
-  /app/                 public/app/index.html (static)
-  /app/styles.css       static stylesheet
-  /app/app.js           static browser UI
-  /app/api.js           static API client
-  /                     existing API documentation (Worker)
-  /swagger              existing Swagger UI (Worker)
-  /openapi.json         existing OpenAPI document (Worker)
-  /domains              public runtime domain allowlist (Worker)
-  /claims/*             existing claim API (Worker)
-  /emails/*             existing list/count/delete API (Worker)
-  /inbox/*              existing message API (Worker)
-  /health               existing health endpoint (Worker)
-```
+The header's **API docs** link uses `/api-docs`. The Worker sends it to the configured
+API origin without propagating query parameters or login credentials. Existing `/app/`
+links redirect to the app root. All browser API calls remain same-origin.
 
-`wrangler.jsonc` adds `assets.directory = "./public"`. API and documentation paths
-are explicitly Worker-first; `/app/` and its assets are asset-first. No `ASSETS`
-binding is necessary because Worker code does not fetch or transform the files.
+The Worker runs before asset handling for host routing and URL credential cleanup.
+Its `ASSETS` binding serves the files in `public/`; the UI remains static HTML/CSS/JS.
+The app root internally serves `public/app/index.html`. Script/style paths remain `/app/*`.
+The existing API, D1 database, mail routing, and claim permissions are unchanged.
 
-There is deliberately **no global SPA fallback**: `not_found_handling` is `none`.
-Unknown API URLs and missing JavaScript files must not become a 200 HTML app shell.
-The client has no nested path router. `/app` uses Cloudflare's default directory
-normalization to `/app/`. Existing `/` documentation is neither moved nor replaced.
-Do not add a `public/index.html` or a global rewrite to the inbox shell.
+## URL login
 
-See Cloudflare's [Static Assets documentation](https://developers.cloudflare.com/workers/static-assets/),
-[Worker-first routing](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/),
-and [static response headers](https://developers.cloudflare.com/workers/static-assets/headers/).
+An existing inbox opens with either `/?email=recipient%40example.test&key=YOUR_KEY`
+or `/#email=recipient%40example.test&key=YOUR_KEY`. Use `URLSearchParams` to encode the
+values rather than concatenating them. Query credentials take precedence when present;
+incomplete query values are not combined with a fragment's values. Duplicates are rejected.
 
-## Client behavior
+Query credentials are redirected to a fragment before the HTML is served. Responses
+use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The browser removes
+credentials from the current URL/history entry before starting API calls, keeps them
+only in memory, and uses the original bearer-header API. It never creates a claim from
+a link. Opening fails for unclaimed inboxes or incorrect keys.
 
-- Enter a full mailbox address and its claim key to open an existing inbox.
-- Generate a 32-byte random key and explicitly choose **Claim & open** to claim a
-  new address. Opening an inbox never implicitly creates a claim.
-- List 20 messages per page, read a message, and confirm before deleting it.
-- Auto-refresh every 15 seconds only on the newest page while the tab is visible.
-  Concurrent list requests are suppressed. Authorization/not-found failures pause
-  polling; Refresh retries it. Requests time out after 15 seconds.
-- Copy an address or access link. Closing clears client state without deleting
-  messages or releasing the mailbox claim.
+A query link still sends credentials in the initial HTTPS request and can be retained
+in upstream logs or external history. Worker query-string log redaction is enforced by
+the deployment script. The **Copy access link** button produces fragment links by default.
+Both link forms grant full existing mailbox authority; neither is read-only or expiring.
 
-All paths in `api.js` are root-relative, not relative to `/app/`. Requests use the
-existing `Authorization: Bearer <claim-key>` protocol and unwrap the API's
-`{ success, result }` envelope. The UI does not require an API hostname, CORS change,
-new secret, or build-time domain substitution. Receiving domains are fetched from
-`GET /domains`. No live receiving domain or deployment hostname belongs in Git.
+## Client behavior and safety
 
-## Access links and message safety
+Claiming requires an explicit **Claim & open** action. Generate a key and save it first.
+Credentials are never saved in cookies or local/session storage. Closing/reloading requires
+supplying the original key or link. Closing the UI does not release the address claim.
 
-An existing claimed inbox can be opened with a link shaped like:
+Messages are listed 20 per page. Auto-refresh runs every 15 seconds on the first page
+while visible. Authorization errors pause polling. Text and HTML-source bodies are
+rendered with `textContent`, not executable markup. Deletion asks for confirmation.
 
-```text
-/app/#email=recipient%40example.test&key=YOUR_CLAIM_KEY
-```
+## Deployment
 
-Use `URLSearchParams` to encode both fields. The browser consumes the fragment,
-removes it from the current history entry, and opens the inbox with a GET request.
-It does not PUT a claim. The key is sent to the API in the Authorization header,
-not in a query string. Fragments are not part of HTTP requests, but the copied
-link remains a bearer credential and must be kept private.
+No frontend build dependency or separate Pages project is needed. `scripts/deploy.ts`
+generates routes from private settings: app/API/apex custom domains plus a wildcard
+Worker route. A proxied wildcard DNS record is required for unknown subdomains. Existing
+specific DNS entries take precedence; this does not route incoming email for extra domains.
+Standard zone TLS covers the apex and one-level subdomains, not arbitrary nested names.
 
-**An access link grants the key's full existing API authority, including deletion
-and claim release. It is not a read-only or expiring share link.** A scoped viewer
-link would require new backend authorization behavior; it cannot be enforced by
-hiding buttons in a static page.
+The registered Worker name and D1 identifiers stay unchanged; the product is Burnmail.
+Production deployment runs API/DNS checks plus webmail assets, branding, docs target,
+apex/wildcard redirects, and query-credential cleanup checks. Unit tests cover routing,
+query/fragment parsing, malformed links, and preserved API behavior.
 
-Credentials are held in page memory, not cookies or local/session storage. Reloading
-or closing requires reopening the saved link or supplying the original key. There
-is no recovery service. Do not lose the key after claiming an address.
-
-Message text, subjects, and addresses are inserted using `textContent`. HTML-only
-messages show their source as text; HTML is not rendered. This intentionally
-avoids scripts, remote tracking images, forms, and active email content in v0.
-`public/_headers` restricts the client to same-origin scripts, styles, and API
-requests, disables framing and referrers, and revalidates static assets. These
-headers apply to assets, not to Worker-generated API/docs responses. API fetches
-use `cache: "no-store"`; the client does not introduce server-side caching.
-
-## Build, test, and deployment
-
-There is no frontend build command and no new dependency. The files in `public/`
-are the deployable frontend. The existing `scripts/deploy.ts` preserves the asset
-configuration and writes its temporary Wrangler config beside the source config,
-so the relative asset path remains correct.
-
-```bash
-bun install --frozen-lockfile
-bun test
-bun run tsc
-bun run check
-bun run deploy --dry-run --outdir dist
-```
-
-The frontend helper/config tests can also run without installing packages:
-
-```bash
-node --test tests/frontend.test.js
-```
-
-For isolated local development, copy `.dev.vars.example` to `.dev.vars`, initialize
-the local D1 schema, and use local Wrangler mode:
-
-```bash
-bunx wrangler d1 execute temp-mail-d1 --local --file ./sql/schema.sql
-bunx wrangler d1 execute temp-mail-d1 --local --file ./sql/indexes.sql
-bunx wrangler dev --local
-```
-
-Visit `/app/` on the origin printed by Wrangler. The existing `bun run dev` script
-uses **remote** mode, so do not use it expecting an isolated database.
-
-Production still uses Cloudflare Builds and `bun run deploy`. No new Pages
-project, DNS record, mail route, D1 database, or runtime secret is needed. Deploy
-from source with `public/` present; a Worker JavaScript bundle alone is not a
-complete static-assets deployment. Merge/deploy is separate from opening a PR.
-
-After deployment, verify `/app/` and its scripts return their expected content
-and security headers, `/` still shows API docs, `/domains` still returns JSON,
-an invalid API URL does not return the inbox shell, and an existing test claim
-can list/read/delete mail through the UI. Do not claim live end-to-end delivery
-based only on mocked client tests or a successful Worker bundle.
+Use `bun test`, `bun run tsc`, `bun run check`, and `bun run deploy --dry-run --outdir dist`.
+Set runtime secrets and private build settings before a real deploy. Live domains and
+hostname values must never be added to source, examples, tests, or documentation.

@@ -1,4 +1,4 @@
-# Passworthy API Specification
+# Burnmail API Specification
 
 The Worker exposes JSON REST endpoints through Hono and publishes generated OpenAPI
 documentation at:

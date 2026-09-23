@@ -1,4 +1,7 @@
-import { accessLink, generateKey, messageBody, parseAccessLink, request } from "./api.js";
+import { accessLink, generateKey, messageBody, consumeAccessLink, request } from "./api.js";
+
+// Clear URL credentials before starting any API requests.
+let linked = consumeAccessLink(location, history);
 
 const byId = (id) => document.getElementById(id);
 const pageSize = 20;
@@ -118,7 +121,7 @@ async function openMessage(id) {
 byId("connect").addEventListener("submit", async (event) => {
   event.preventDefault();
   const email = byId("address").value.trim();
-  const key = byId("key").value.trim();
+  const key = byId("key").value;
   const claim = event.submitter?.value === "claim";
   if (claim && !confirm(`Claim ${email} with this key? Save your key first; it cannot be recovered.`)) return;
   byId("credentials").disabled = true;
@@ -227,8 +230,6 @@ document.addEventListener("visibilitychange", () => {
 
 // Consume credentials once, then remove them from the current history entry.
 // A link only opens an existing claim; following one never claims an address.
-let linked = parseAccessLink(location.hash);
-if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 if (linked) {
   byId("address").value = linked.email;
   byId("key").value = linked.key;

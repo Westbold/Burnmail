@@ -1,6 +1,6 @@
-# Passworthy Temp Email
+# Burnmail
 
-Claim-based temporary inboxes for Passworthy. A Cloudflare Worker receives inbound mail,
+Claim-based temporary inboxes for Burnmail. A Cloudflare Worker receives inbound mail,
 stores messages in D1, and exposes an authenticated HTTP API for reading and deleting them.
 
 **Claim first, receive second.** Mail for an unclaimed or unsupported address is discarded
@@ -18,6 +18,24 @@ messages are temporary. This is an inbound-email service, not an SMTP sending ac
 The key is hashed before storage. Repeating a claim with the same key is idempotent; a
 competing key receives `409 Conflict`. Claims are first-come, first-served: the prototype
 does not have a separate administrator approval gate. Keep claim keys in your secret store.
+
+## Webmail
+
+Burnmail lives at the root of the privately configured app hostname. The API hostname's
+root remains the API documentation. The receiving zone's apex and unconfigured subdomains
+redirect to the app. Old `/app/` webmail links redirect to its new root.
+
+The app header links to `/api-docs`, which redirects to the configured API documentation.
+An existing mailbox can be opened with `/?email=<URL-encoded-address>&key=<URL-encoded-key>`.
+Use `URLSearchParams` to encode both values, especially `+`, `&`, `#`, and `=`. Opening a
+link never claims a new address. Missing, invalid, or wrong credentials do not bypass auth.
+
+The Worker converts login query parameters to a fragment; the browser consumes the
+credentials, clears them from its current history entry, and opens the inbox with its
+bearer header. Copied access links still use `#email=...&key=...` by default. Both forms
+are full-access credentials, not read-only links. Query links reach the server on their
+first request and can be retained outside this application; prefer fragments when possible.
+The deployment enables Worker query-string log redaction. Do not share real links publicly.
 
 ## API quick start
 
@@ -51,7 +69,7 @@ curl --fail-with-body -X DELETE "$API_BASE_URL/claims/$EMAIL_ADDRESS" \
   -H "Authorization: Bearer $CLAIM_KEY"
 ```
 
-The deployment serves interactive documentation at `/`, Swagger UI at `/swagger`, and its
+The API hostname serves interactive documentation at `/`, Swagger UI at `/swagger`, and its
 OpenAPI document at `/openapi.json`. The API explorer uses the current origin.
 
 | Method | Path | Purpose |
@@ -75,7 +93,7 @@ for response shapes and error behavior.
 | Setting | Location | Purpose |
 | --- | --- | --- |
 | `EMAIL_DOMAINS` | Cloudflare Worker secret | Comma-separated receiving domains; no hard-coded fallback |
-| `API_HOSTNAME` | Cloudflare Builds secret | Custom API hostname inserted only into a temporary deploy config |
+| `API_HOSTNAME`, `APP_HOSTNAME`, `ROOT_HOSTNAME` | Worker and Cloudflare Builds secrets | Host routing and temporary deployment routes; no hostname literals in Git |
 | `EMAIL_DOMAINS` | Cloudflare Builds secret | Matches the runtime allowlist for source audits and post-deploy verification |
 | `D1` | Wrangler binding | Message and claim database |
 | `HOURS_TO_DELETE_D1` | Wrangler variable | Message retention threshold; currently `3` |
@@ -106,8 +124,8 @@ See [setup](documentation/01_setup.md) before using live resources.
 
 Production pushes to `main` are deployed by Cloudflare Builds. The build command runs locked
 installation, tests, and TypeScript checks. `bun run deploy` then audits tracked files for
-private configuration, injects the custom hostname into an ignored temporary config, deploys,
-deletes that config, and runs live API/DNS smoke tests. The existing D1 binding and mail
+private configuration, injects the private hostnames into an ignored temporary config, deploys,
+deletes that config, and runs live API/DNS/webmail smoke tests. The existing D1 binding and mail
 routing are retained. A post-deploy smoke-test failure reports a failed build but does not
 automatically roll back the deployed version.
 
@@ -153,3 +171,6 @@ for repeatable checks and the external email-delivery test.
 MIT; see [LICENSE](LICENSE). This project is derived from `vwh/temp-mail`. The original
 copyright notice is preserved. Upstream hosted services, donated domains, and third-party
 clients are not part of this deployment.
+
+The Cloudflare Worker and D1 identifiers retain their existing deployment names to avoid
+recreating resources or disrupting inboxes. Product UI and API titles use Burnmail.

@@ -1,11 +1,10 @@
-import app from "@/app";
-
 import { handleEmail } from "@/handlers/emailHandler";
+import { handleHttp } from "@/handlers/httpHandler";
 import { handleScheduled } from "@/handlers/scheduledHandler";
 
 export default {
 	// Hono ( Cloudflare Worker )
-	fetch: app.fetch,
+	fetch: handleHttp,
 
 	// Cloudflare email router
 	email: handleEmail,

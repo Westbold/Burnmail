@@ -9,7 +9,8 @@
 	"assets": {
 		"directory": "./public",
 		"not_found_handling": "none",
-		"run_worker_first": ["/", "/claims/*", "/emails/*", "/inbox/*", "/domains", "/health", "/openapi.json", "/swagger"]
+		"run_worker_first": true,
+		"binding": "ASSETS"
 	},
 	"observability": {
 		"enabled": true

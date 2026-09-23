@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { afterEach, test } from "node:test";
-import { accessLink, ApiError, generateKey, messageBody, parseAccessLink, request } from "../public/app/api.js";
+import { accessLink, ApiError, generateKey, messageBody, parseAccessLink, consumeAccessLink, request } from "../public/app/api.js";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -69,7 +69,7 @@ test("access links keep credentials in the fragment and round-trip reserved char
   const email = "recipient+tag@example.test";
   const key = "a&b=+/#? fixture";
   const url = new URL(accessLink("https://mail.example.test", email, key));
-  assert.equal(url.pathname, "/app/");
+  assert.equal(url.pathname, "/");
   assert.equal(url.search, "");
   assert.deepEqual(parseAccessLink(url.hash), { email, key });
   assert.equal(parseAccessLink("#email=recipient%40example.test"), null);
@@ -88,14 +88,47 @@ test("static assets are scoped to /app without taking over API routes or root do
   assert.equal(config.main, "src/index.ts");
   assert.equal(config.assets.directory, "./public");
   assert.equal(config.assets.not_found_handling, "none");
-  for (const route of ["/", "/claims/*", "/emails/*", "/inbox/*", "/domains", "/health", "/openapi.json", "/swagger"]) {
-    assert.ok(config.assets.run_worker_first.includes(route));
-  }
-  assert.ok(!config.assets.run_worker_first.includes("/app/*"));
+  assert.equal(config.assets.run_worker_first, true);
+  assert.equal(config.assets.binding, "ASSETS");
   await assert.rejects(readFile(new URL("../public/index.html", import.meta.url)));
   const html = await readFile(new URL("../public/app/index.html", import.meta.url), "utf8");
   assert.ok(html.includes('src="/app/app.js"'));
   const headers = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
   assert.match(headers, /^\/app\/\*/);
   assert.match(headers, /connect-src 'self'/);
+});
+
+
+test("query login round-trips email and opaque keys and removes credentials from history", () => {
+  const email = "name+tag@example.test";
+  const key = "a+b&c=#/?";
+  const url = new URL("https://app.example.test/?view=inbox");
+  url.searchParams.set("email", email);
+  url.searchParams.set("key", key);
+  let clean;
+  assert.deepEqual(consumeAccessLink(url, { replaceState: (_state, _title, path) => { clean = path; } }), { email, key });
+  assert.equal(clean, "/?view=inbox");
+});
+
+test("fragment login remains supported and the key never goes in a copied query", () => {
+  const url = new URL(accessLink("https://app.example.test", "inbox@example.test", "key+value"));
+  let clean;
+  assert.deepEqual(consumeAccessLink(url, { replaceState: (_s, _t, path) => { clean = path; } }), { email: "inbox@example.test", key: "key+value" });
+  assert.equal(clean, "/");
+  assert.equal(url.search, "");
+});
+
+test("incomplete and duplicate login parameters do not open or combine credentials", () => {
+  for (const suffix of ["?email=x%40example.test#key=secret", "?key=one&key=two&email=x%40example.test", "?email=x%40example.test&key="]) {
+    let clean;
+    assert.equal(consumeAccessLink(new URL("https://app.example.test/" + suffix), { replaceState: (_s, _t, path) => { clean = path; } }), null);
+    assert.equal(clean, "/");
+  }
+});
+
+test("Burnmail branding and the API documentation link are present", async () => {
+  const html = await readFile(new URL("../public/app/index.html", import.meta.url), "utf8");
+  assert.ok(html.includes("<title>Burnmail</title>"));
+  assert.ok(html.includes('href="/api-docs"'));
+  assert.ok(!html.includes("PASSWORTHY"));
 });

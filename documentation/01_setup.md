@@ -1,6 +1,6 @@
 # Setup
 
-Passworthy uses Bun, a Cloudflare Worker, Email Routing, and D1. There is no R2 attachment
+Burnmail uses Bun, a Cloudflare Worker, Email Routing, and D1. There is no R2 attachment
 store or outbound SMTP account. Do not add deployment domains or API hostnames to Git.
 
 ## Install and check
@@ -23,40 +23,38 @@ The schema contains `emails` and `claims`; attachments are not stored.
 
 ## Runtime configuration
 
-Create the Worker secret `EMAIL_DOMAINS` with a comma-separated list of the receiving domains.
-Use the Cloudflare dashboard or `bunx wrangler secret put EMAIL_DOMAINS`. Never place the
-real value in a command committed to this repository. A missing value supports no recipients;
-malformed hostnames are rejected rather than silently allowing arbitrary domains.
+Create the Worker secret `EMAIL_DOMAINS` with a comma-separated list of receiving domains.
+Use the Cloudflare dashboard or `bunx wrangler secret put EMAIL_DOMAINS`. Never put its real
+value in a command committed to this repository. Missing configuration supports no recipients.
 
-Copy `.dev.vars.example` to the ignored `.dev.vars` for local development. Its reserved
-fixture value is not a production receiving domain. The generated platform types are in
-`worker-configuration.d.ts`; project-specific runtime secrets are declared in `src/env.d.ts`.
+Set `API_HOSTNAME`, `APP_HOSTNAME`, and `ROOT_HOSTNAME` as Worker secrets for production host
+routing. Set the same hostnames as private Cloudflare Builds secrets for deployment routes.
+The app/API hostnames must be the corresponding `app.` and `api.` names under the root zone.
+See the deployment runbook for DNS and authentication requirements.
+
+Copy `.dev.vars.example` to the ignored `.dev.vars` for development. Its reserved fixture is
+not a production receiving domain. With no app hostname configured, local webmail is at
+`/app/` and API docs remain at `/`. Platform types are in `worker-configuration.d.ts`;
+project-specific runtime bindings are declared in `src/env.d.ts`.
 
 ## Email Routing
 
-Configure each receiving domain in Cloudflare DNS. Enable Email Routing, review its MX/SPF
-and DKIM records, and configure a catch-all action that sends to the existing Worker.
-Preserve unrelated mail-provider records and routing rules. Hostnames belong in Cloudflare's
-configuration, not in tracked examples, source constants, or deployment notes.
-
-The recipient must have a claim before incoming mail is processed. Both the claim API and
-incoming-email handler use the runtime allowlist.
+Configure receiving domains in Cloudflare DNS. Enable Email Routing, review MX/SPF and DKIM,
+and configure the catch-all to send to the existing Worker. Preserve unrelated mail-provider
+records and routing rules. Web redirects do not change which email domains can receive mail.
+Claim an address before sending mail to it; unclaimed recipients are discarded.
 
 ## Optional services
 
-Webhook forwarding requires Worker secrets `WEBHOOK_URL` and `WEBHOOK_SECRET`. Telegram
-logging requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_LOG_ENABLE=true`.
-Neither is required for basic inbox operation. Keep all values in Cloudflare secrets or
-ignored local configuration.
-
-`bun run cf-info` inspects account resources using privately supplied credentials. Its output
-can contain deployment details; do not paste that output into the repository or public logs.
+Webhook forwarding requires `WEBHOOK_URL` and `WEBHOOK_SECRET`. Telegram logging requires
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_LOG_ENABLE=true`. Neither is required.
+Keep values in Cloudflare secrets or ignored local files. `bun run cf-info` can expose
+infrastructure details in its output; do not publish that output.
 
 ## Development mode
 
-`bun run dev` runs `wrangler dev --remote`. It uses remote resources, so it can affect live
-data. Unit tests are the safer default for isolated development. Use a separately configured
-Worker/database for integration development.
+`bun run dev` uses `wrangler dev --remote` and can affect live data. Use local Wrangler mode
+with a local D1 database or a separate development Worker for isolated integration testing.
 
-See [deployment](04_cloudflare_deployment.md) for private build configuration and
-[testing](02_testing.md) for validation commands.
+See [deployment](04_cloudflare_deployment.md), [testing](02_testing.md), and
+[webmail](06_frontend.md) for deployment, URL login, and verification details.

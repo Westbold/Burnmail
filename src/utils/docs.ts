@@ -13,9 +13,9 @@ export function setupDocumentation(app: OpenAPIHono<{ Bindings: CloudflareBindin
 		openapi: "3.0.0",
 		info: {
 			version: "1.0.0",
-			title: "Passworthy Temp Email API",
+			title: "Burnmail API",
 			description: `
-Claim-based temporary inboxes for Passworthy, backed by Cloudflare Email Routing and D1.
+Claim-based temporary inboxes for Burnmail, backed by Cloudflare Email Routing and D1.
 
 Claim an address with PUT /claims/{emailAddress} before sending mail to it.
 Use the same Authorization: Bearer <key> for every subsequent request to that inbox.

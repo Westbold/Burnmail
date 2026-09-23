@@ -1,6 +1,6 @@
-# Passworthy contributor instructions
+# Burnmail contributor instructions
 
-This repository implements claim-based temporary inboxes for Passworthy using Bun,
+This repository implements claim-based temporary inboxes for Burnmail using Bun,
 TypeScript, Hono, Cloudflare Email Routing, and D1. Read README.md and documentation/03_apispec.md
 for behavior; do not copy upstream hosted-service assumptions into project documentation.
 
