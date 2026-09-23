@@ -33,6 +33,10 @@ jobs:
           text = path.read_text()
           assert 'method: "PUT"' in text
           path.write_text(text.replace('method: "PUT"', 'method: "PATCH"'))
+          path = pathlib.Path('src/handlers/httpHandler.test.ts')
+          text = path.read_text()
+          assert 'const ctx = { waitUntil()' in text
+          path.write_text(text.replace('const ctx = { waitUntil()', 'const ctx = { props: {}, waitUntil()'))
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
       - name: Format and check Worker source
