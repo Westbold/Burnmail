@@ -1,0 +1,71 @@
+name: Validate Burnmail changes
+on:
+  push:
+    branches: [feat/burnmail-host-routing]
+    paths: [.github/workflows/burnmail-validate.yml, .github/prepare-burnmail.py]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Prepare source changes
+        run: python .github/prepare-burnmail.py
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Format and check Worker source
+        run: bunx biome check --write ./src ./scripts
+      - name: Test all routes and client helpers
+        run: bun test
+      - name: Typecheck and lint
+        run: bun run tsc && bun run check
+      - name: Build without deploying
+        run: bun run deploy --dry-run --outdir dist
+      - name: Store validated source tree without changing any branch
+        shell: python
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import json, os, pathlib, subprocess, urllib.request
+          def git(*args):
+              return subprocess.check_output(['git', *args]).decode().strip()
+          base_tree = git('rev-parse', 'HEAD^{tree}')
+          names = set(git('diff', '--name-only').splitlines())
+          names.update(git('ls-files', '--others', '--exclude-standard').splitlines())
+          entries = []
+          for name in sorted(names):
+              if name.startswith('.github/workflows/'):
+                  continue
+              path = pathlib.Path(name)
+              item = {'path': name, 'mode': '100644', 'type': 'blob'}
+              if path.is_file():
+                  item['content'] = path.read_text()
+              else:
+                  item['sha'] = None
+              entries.append(item)
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/trees",
+              data=json.dumps({'base_tree': base_tree, 'tree': entries}).encode(),
+              headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
+              method='POST')
+          with urllib.request.urlopen(request, timeout=60) as response:
+              tree = json.load(response)['sha']
+          print(f'VALIDATED_TREE_SHA={tree}')
+          pathlib.Path('/tmp/burnmail-validation.json').write_text(json.dumps({'tree': tree, 'source_commit': os.environ['GITHUB_SHA'], 'changed_files': len(entries)}))
+          subprocess.run(['git', 'add', '-A'], check=True)
+          with open('/tmp/burnmail-validated.tar', 'wb') as output:
+              subprocess.run(['git', 'archive', '--format=tar', git('write-tree')], stdout=output, check=True)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: burnmail-validated-source
+          path: |
+            /tmp/burnmail-validation.json
+            /tmp/burnmail-validated.tar
+          retention-days: 1
