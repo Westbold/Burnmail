@@ -1,0 +1,75 @@
+name: Validate HTML mail and deletion
+on:
+  push:
+    branches: [feat/html-mail-and-mailbox-delete]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Prepare and verify source changes
+        run: python .github/prepare-html-mail.py
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Format changed Worker source
+        run: bunx biome check --write ./src ./scripts
+      - name: Tests, types, and lint
+        run: bun test && bun run tsc && bun run check
+      - name: Build without deployment
+        run: bun run deploy --dry-run --outdir dist
+      - name: Install isolated browser test tooling
+        run: |
+          npm install --prefix /tmp/burnmail-browser --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.63.0
+          node /tmp/burnmail-browser/node_modules/playwright/cli.js install --with-deps chromium firefox
+      - name: Chromium and Firefox security and UI tests
+        env:
+          PLAYWRIGHT_MODULE: /tmp/burnmail-browser/node_modules/playwright/index.mjs
+        run: node tests/browser/webmail.mjs
+      - name: Store validated source without publishing a branch
+        shell: python
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import json, os, pathlib, subprocess, urllib.request
+          def git(*args):
+              return subprocess.check_output(['git', *args]).decode().strip()
+          names = set(git('diff', '--name-only').splitlines())
+          names.update(git('ls-files', '--others', '--exclude-standard').splitlines())
+          entries = []
+          for name in sorted(names):
+              if name.startswith('.github/workflows/'):
+                  continue
+              path = pathlib.Path(name)
+              item = {'path': name, 'mode': '100644', 'type': 'blob'}
+              if path.is_file():
+                  item['content'] = path.read_text()
+              else:
+                  item['sha'] = None
+              entries.append(item)
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/trees",
+              data=json.dumps({'base_tree': git('rev-parse', 'HEAD^{tree}'), 'tree': entries}).encode(),
+              headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
+              method='POST')
+          with urllib.request.urlopen(req, timeout=60) as response:
+              tree = json.load(response)['sha']
+          print(f'VALIDATED_TREE_SHA={tree}')
+          pathlib.Path('/tmp/html-mail-validation.json').write_text(json.dumps({'tree': tree, 'source_commit': os.environ['GITHUB_SHA'], 'changed_files': len(entries)}))
+          subprocess.run(['git', 'add', '-A'], check=True)
+          with open('/tmp/html-mail-validated.tar', 'wb') as output:
+              subprocess.run(['git', 'archive', '--format=tar', git('write-tree')], stdout=output, check=True)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: html-mail-validated-source
+          path: |
+            /tmp/html-mail-validation.json
+            /tmp/html-mail-validated.tar
+          retention-days: 1
