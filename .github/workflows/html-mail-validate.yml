@@ -4,6 +4,9 @@ on:
     branches: [feat/html-mail-and-mailbox-delete]
 permissions:
   contents: write
+concurrency:
+  group: html-mail-validation
+  cancel-in-progress: true
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -16,7 +19,9 @@ jobs:
         with:
           bun-version: latest
       - name: Prepare and verify source changes
-        run: python .github/prepare-html-mail.py
+        run: |
+          python .github/prepare-html-mail.py
+          python .github/fix-image-fixture.py
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
       - name: Format changed Worker source
@@ -28,7 +33,7 @@ jobs:
       - name: Install isolated browser test tooling
         run: |
           npm install --prefix /tmp/burnmail-browser --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.63.0
-          node /tmp/burnmail-browser/node_modules/playwright/cli.js install --with-deps chromium firefox
+          node /tmp/burnmail-browser/node_modules/playwright/cli.js install --with-deps chromium firefox > /tmp/browser-install.log 2>&1 || { tail -80 /tmp/browser-install.log; exit 1; }
       - name: Chromium and Firefox security and UI tests
         env:
           PLAYWRIGHT_MODULE: /tmp/burnmail-browser/node_modules/playwright/index.mjs
