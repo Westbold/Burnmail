@@ -17,8 +17,20 @@ async function verifyWebmail(): Promise<void> {
 	}
 	const ui = await get(appOrigin);
 	const html = await ui.text();
-	check(ui.status === 200 && html.includes("<title>Burnmail</title>"), `app root (HTTP ${ui.status})`);
+	check(
+		ui.status === 200 && html.includes("<title>Burnmail</title>"),
+		`app root (HTTP ${ui.status})`,
+	);
 	check(html.includes('href="/api-docs"'), "docs link");
+	check(
+		html.includes('id="html-body"') && html.includes('id="delete-mailbox"'),
+		"HTML reader and mailbox deletion controls",
+	);
+	const policy = ui.headers.get("content-security-policy") ?? "";
+	check(
+		policy.includes("frame-src 'self'") && !policy.includes("script-src 'self' 'unsafe-inline'"),
+		"HTML isolation policy",
+	);
 	const docs = await get(`${appOrigin}/api-docs`);
 	check(
 		docs.status === 302 && docs.headers.get("location") === `https://${apiHost}/`,
@@ -33,7 +45,13 @@ async function verifyWebmail(): Promise<void> {
 			`hostname redirect (HTTP ${response.status})`,
 		);
 	}
-	for (const path of ["/app/app.js", "/app/api.js", "/app/styles.css"]) {
+	for (const path of [
+		"/app/app.js",
+		"/app/api.js",
+		"/app/styles.css",
+		"/app/html-email.js",
+		"/app/vendor/purify.es.mjs",
+	]) {
 		check((await get(appOrigin + path)).status === 200, "static asset");
 	}
 	const query = new URLSearchParams({ email: "inbox@example.test", key: "test+&=#value" });

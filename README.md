@@ -145,8 +145,10 @@ is sent as JSON with `X-Webhook-Signature: HMAC-SHA512=<base64 signature>`, comp
 exact UTF-8 request body. Delivery failures are logged without deleting the stored message;
 there is no durable webhook retry queue. See [webhook details](documentation/03_apispec.md#webhook-delivery).
 
-Treat message HTML as untrusted content in clients; the server's basic content cleanup is
-not a substitute for safe rendering. A successful health check does not prove that a real
+The webmail renders sanitized HTML in an isolated, scriptless frame, with a Text alternative
+and per-message opt-in for remote images. The server's basic cleanup is not a substitute
+for client-side isolation. Delete mailbox requires typing the address, permanently removes
+its stored messages, and releases the claim; the address may subsequently be claimed again. A successful health check does not prove that a real
 external email has traversed DNS, routing, and storage.
 
 ## Project layout

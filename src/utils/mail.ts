@@ -62,7 +62,8 @@ function textToHtmlTemplate(text: string): string | null {
 		return null;
 	}
 
-	return `<pre style="font-family: sans-serif; white-space: pre-wrap;">${text}</pre>`;
+	const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	return `<pre style="font-family: sans-serif; white-space: pre-wrap;">${escaped}</pre>`;
 }
 
 /**

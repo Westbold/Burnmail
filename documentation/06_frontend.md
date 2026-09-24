@@ -41,8 +41,23 @@ Credentials are never saved in cookies or local/session storage. Closing/reloadi
 supplying the original key or link. Closing the UI does not release the address claim.
 
 Messages are listed 20 per page. Auto-refresh runs every 15 seconds on the first page
-while visible. Authorization errors pause polling. Text and HTML-source bodies are
-rendered with `textContent`, not executable markup. Deletion asks for confirmation.
+while visible. Authorization errors pause polling. HTML is displayed by default when available, including inline styling, embedded styles,
+tables, and links. A Text button keeps the plain-text alternative available. DOMPurify
+sanitizes sender markup before it enters an opaque-origin sandboxed iframe. Scripts,
+forms, nested frames, plugins, and automatic navigation are blocked. Sender CSS cannot
+style the app or access the bearer key. HTTPS/HTTP links open separately with no opener
+or referrer. Remote images (including CSS background images) are blocked until the reader
+chooses Load remote images for the current message. Embedded raster data images work;
+CID attachment images remain unavailable because attachments are not stored. The per-message
+image preference resets when switching mail. CSP permits inline styles in the sandbox;
+application scripts remain same-origin only and no inline JavaScript is allowed.
+
+Delete message removes only the selected message. Delete mailbox requires typing the
+full mailbox address, calls the authenticated claim-deletion endpoint, permanently removes
+its stored messages, and releases the claim. Success clears the reader, aborts pending
+requests, clears in-memory credentials, and returns to login. A cancellation or failed
+authorized request does not silently close the inbox. Other controls/polling are paused
+during deletion. The address can be claimed again; deletion is not a permanent address ban.
 
 ## Deployment
 

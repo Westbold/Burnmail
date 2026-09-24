@@ -1,0 +1,30 @@
+name: Webmail Browser Tests
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [public/**, tests/browser/**, src/utils/mail.ts, .github/workflows/browser-tests.yml]
+  pull_request:
+    branches: [main]
+    paths: [public/**, tests/browser/**, src/utils/mail.ts, .github/workflows/browser-tests.yml]
+permissions:
+  contents: read
+concurrency:
+  group: webmail-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browsers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated browser test tooling
+        run: |
+          npm install --prefix /tmp/burnmail-browser --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.63.0
+          node /tmp/burnmail-browser/node_modules/playwright/cli.js install --with-deps chromium firefox > /tmp/browser-install.log 2>&1 || { tail -80 /tmp/browser-install.log; exit 1; }
+      - name: Chromium and Firefox HTML security and deletion flows
+        env:
+          PLAYWRIGHT_MODULE: /tmp/burnmail-browser/node_modules/playwright/index.mjs
+        run: node tests/browser/webmail.mjs

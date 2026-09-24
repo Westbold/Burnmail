@@ -45,7 +45,7 @@ export function parseAccessLink(parameters) {
   return values.getAll("email").length === 1 && values.getAll("key").length === 1 && email && key ? { email, key } : null;
 }
 
-// Deliberately return text, never trusted markup. The UI uses textContent only.
+// Plain-text alternative only. HTML is handled separately by the isolated email renderer.
 export function messageBody(message) {
   if (message.text_content) return { label: "Plain text", text: message.text_content };
   if (message.html_content) return { label: "HTML source (not rendered)", text: message.html_content };

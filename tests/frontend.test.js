@@ -76,7 +76,7 @@ test("access links keep credentials in the fragment and round-trip reserved char
   assert.equal(parseAccessLink(""), null);
 });
 
-test("email content is text even for HTML-only messages", () => {
+test("the explicit text alternative never returns trusted markup", () => {
   const html = '<img src="https://example.test/pixel" onerror="alert(1)"><script>alert(1)</script>';
   assert.deepEqual(messageBody({ text_content: "plain", html_content: html }), { label: "Plain text", text: "plain" });
   assert.deepEqual(messageBody({ html_content: html }), { label: "HTML source (not rendered)", text: html });

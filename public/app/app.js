@@ -1,5 +1,7 @@
 import { accessLink, generateKey, messageBody, consumeAccessLink, request } from "./api.js";
 
+import { emailDocument } from "./html-email.js";
+
 // Clear URL credentials before starting any API requests.
 let linked = consumeAccessLink(location, history);
 
@@ -13,6 +15,9 @@ let offset = 0;
 let rows = [];
 let pollAllowed = true;
 let deleting = false;
+let currentMessage = null;
+let bodyMode = "html";
+let remoteImages = false;
 
 function status(text, error = false) {
   byId("status").textContent = text;
@@ -25,12 +30,57 @@ function report(error) {
 }
 
 function clearReader() {
+  currentMessage = null;
+  bodyMode = "html";
+  remoteImages = false;
+  byId("html-body").hidden = true;
+  byId("html-body").removeAttribute("srcdoc");
+  byId("body-controls").hidden = true;
+  byId("image-warning").hidden = true;
+  byId("body").hidden = false;
   selectedId = null;
   selectionVersion += 1;
   byId("message").hidden = true;
   byId("reader-empty").hidden = false;
   for (const id of ["subject", "sender", "received", "body", "body-kind"]) byId(id).textContent = "";
 }
+
+function renderBody() {
+  if (!currentMessage) return;
+  const hasHtml = typeof currentMessage.html_content === "string" && currentMessage.html_content.trim().length > 0;
+  const showHtml = hasHtml && bodyMode === "html";
+  byId("body-controls").hidden = !hasHtml;
+  byId("view-html").setAttribute("aria-pressed", String(showHtml));
+  byId("view-text").setAttribute("aria-pressed", String(!showHtml));
+  byId("load-images").hidden = !showHtml;
+  byId("load-images").textContent = remoteImages ? "Block remote images" : "Load remote images";
+  byId("image-warning").hidden = !showHtml;
+  byId("image-warning").textContent = remoteImages
+    ? "Remote images are enabled for this message only. They may reveal that you opened it."
+    : "Remote images are blocked for privacy. Loading them may tell the sender that you opened this message.";
+  byId("html-body").hidden = true;
+  byId("body").hidden = showHtml;
+  if (showHtml) {
+    try {
+      byId("html-body").srcdoc = emailDocument(currentMessage.html_content, remoteImages);
+      byId("html-body").hidden = false;
+      byId("body-kind").textContent = "HTML email";
+    } catch {
+      byId("body").hidden = false;
+      byId("body").textContent = messageBody(currentMessage).text;
+      byId("body-kind").textContent = "HTML could not be displayed safely. Showing the text alternative.";
+    }
+  } else {
+    byId("html-body").removeAttribute("srcdoc");
+    const body = messageBody(currentMessage);
+    byId("body-kind").textContent = body.label;
+    byId("body").textContent = body.text;
+  }
+}
+
+byId("view-html").addEventListener("click", () => { bodyMode = "html"; renderBody(); });
+byId("view-text").addEventListener("click", () => { bodyMode = "text"; renderBody(); });
+byId("load-images").addEventListener("click", () => { remoteImages = !remoteImages; renderBody(); });
 
 function date(seconds) {
   return new Date(seconds * 1000).toLocaleString();
@@ -63,6 +113,10 @@ function renderList() {
   byId("next").disabled = listBusy || deleting || rows.length < pageSize;
   byId("refresh").disabled = listBusy || deleting;
   byId("delete").disabled = listBusy || deleting;
+  byId("delete-mailbox").disabled = listBusy || deleting;
+  byId("close").disabled = deleting;
+  byId("copy-address").disabled = deleting;
+  byId("copy-link").disabled = deleting;
   byId("page").textContent = `Page ${offset / pageSize + 1}`;
 }
 
@@ -107,9 +161,8 @@ async function openMessage(id) {
     byId("subject").textContent = email.subject || "(No subject)";
     byId("sender").textContent = `From: ${email.from_address}`;
     byId("received").textContent = `Received: ${date(email.received_at)}`;
-    const body = messageBody(email);
-    byId("body-kind").textContent = body.label;
-    byId("body").textContent = body.text;
+    currentMessage = email;
+    renderBody();
     byId("message").hidden = false;
     byId("reader-empty").hidden = true;
     status("");
@@ -158,7 +211,7 @@ byId("generate").addEventListener("click", () => {
   status("New key generated. Save it, then use Claim & open for an unclaimed address.");
 });
 
-byId("close").addEventListener("click", () => {
+function closeMailbox(message) {
   session?.controller.abort();
   session = null;
   rows = [];
@@ -171,7 +224,47 @@ byId("close").addEventListener("click", () => {
   byId("mailbox-address").textContent = "";
   byId("mailbox").hidden = true;
   byId("login").hidden = false;
-  status("Closed. The mailbox claim and its messages were not deleted.");
+  byId("key").value = "";
+  byId("delete-mailbox").disabled = false;
+  byId("close").disabled = false;
+  byId("copy-address").disabled = false;
+  byId("copy-link").disabled = false;
+  status(message);
+}
+
+byId("close").addEventListener("click", () => {
+  if (!deleting) closeMailbox("Closed. The mailbox claim and its messages were not deleted.");
+});
+
+byId("delete-mailbox").addEventListener("click", async () => {
+  if (!session || deleting || listBusy) return;
+  const active = session;
+  const confirmation = prompt(
+    `Permanently delete ${active.email} and ALL stored messages? This cannot be undone. ` +
+    "The claim will be released and the address can be claimed again. " +
+    "Type the full mailbox address to confirm:",
+  );
+  if (confirmation !== active.email) {
+    if (confirmation !== null) status("Mailbox not deleted: the confirmation address did not match.", true);
+    return;
+  }
+  deleting = true;
+  selectionVersion += 1;
+  renderList();
+  status("Deleting mailbox and all stored messages...");
+  try {
+    await request(`/claims/${encodeURIComponent(active.email)}`, { ...active, method: "DELETE" });
+    if (session !== active) return;
+    closeMailbox("Mailbox permanently deleted. All stored messages were removed and the address was released.");
+    byId("address").value = "";
+  } catch (error) {
+    if (session === active) report(error);
+  } finally {
+    if (session === active) {
+      deleting = false;
+      renderList();
+    }
+  }
 });
 
 byId("refresh").addEventListener("click", () => void refresh());

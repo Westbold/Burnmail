@@ -45,9 +45,10 @@
           <button id="copy-address" type="button" class="secondary">Copy address</button>
           <button id="copy-link" type="button" class="secondary">Copy access link</button>
           <button id="close" type="button" class="secondary">Close inbox</button>
+          <button id="delete-mailbox" type="button" class="danger">Delete mailbox</button>
         </div>
       </div>
-      <p class="hint">Save your access link before leaving. Anyone with it can read, delete, and release this inbox. Closing does not release the claim.</p>
+      <p class="hint">Save your access link before leaving. Anyone with it can read, delete, and release this inbox. Closing does not release the claim. Delete mailbox permanently removes all messages and releases the address.</p>
       <div class="workspace">
         <section class="card inbox" aria-label="Messages">
           <div class="toolbar"><h2>Messages</h2><button id="refresh" type="button" class="secondary">Refresh</button></div>
@@ -62,10 +63,17 @@
         <section class="card reader" aria-label="Message reader">
           <p id="reader-empty" class="empty">Select a message to read it.</p>
           <article id="message" hidden>
-            <div class="toolbar"><h2 id="subject"></h2><button id="delete" type="button" class="danger">Delete</button></div>
+            <div class="toolbar"><h2 id="subject"></h2><button id="delete" type="button" class="danger">Delete message</button></div>
             <p id="sender" class="hint"></p>
             <p id="received" class="hint"></p>
             <p id="body-kind" class="hint"></p>
+            <div id="body-controls" class="actions body-controls" hidden>
+              <button id="view-html" type="button" class="secondary" aria-pressed="true">HTML</button>
+              <button id="view-text" type="button" class="secondary" aria-pressed="false">Text</button>
+              <button id="load-images" type="button" class="secondary">Load remote images</button>
+            </div>
+            <p id="image-warning" class="hint" hidden>Remote images are blocked for privacy. Loading them may tell the sender that you opened this message.</p>
+            <iframe id="html-body" title="HTML email content" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="about:blank" hidden></iframe>
             <pre id="body"></pre>
           </article>
         </section>
