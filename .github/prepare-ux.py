@@ -8,6 +8,19 @@ req = urllib.request.Request(
 with urllib.request.urlopen(req, timeout=30) as response:
     Path('public/app/index.html').write_bytes(base64.b64decode(json.load(response)['content']))
 
+p = Path('public/app/app.js')
+s = p.read_text()
+before = 'function renderList() {\n  const list = byId("messages");\n  list.replaceChildren();'
+after = before + '''
+  if (!session) {
+    byId("reader").hidden = true;
+    byId("pagination").hidden = true;
+    renderHome();
+    return;
+  }'''
+assert before in s
+p.write_text(s.replace(before, after))
+
 p = Path('tests/browser/webmail.mjs')
 s = p.read_text()
 s = s.replace('await page.locator("#delete-mailbox").click();', 'await clickDeleteMailbox(page);')
@@ -41,6 +54,7 @@ s = s[:a] + '''async function login(page, email, key, claim = false) {
   }
 }
 ''' + s[b:]
+s = s.replace('async function recall(page, email) { await page.getByRole', 'async function recall(page, email) {\n  if (!await page.locator("#remembered").isVisible()) await page.locator("#home-link").click();\n  await page.getByRole')
 s = s.replace('"Saved mailbox could not be opened"', '"Mailbox no longer exists"')
 s = s.replace('assert.equal(creations, 1);\n      page.once', 'assert.equal(creations, 1);\n      await page.locator("#close").click();\n      page.once')
 s = s.replace('page.once("dialog", d => d.accept(gamma)); await page.locator("#delete-mailbox").click();', 'await recall(page, gamma); await opened(page, gamma);\n      await page.getByLabel("Mailbox options", { exact: true }).click();\n      page.once("dialog", d => d.accept(gamma)); await page.locator("#delete-mailbox").click();')
