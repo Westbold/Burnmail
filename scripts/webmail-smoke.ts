@@ -22,6 +22,8 @@ async function verifyWebmail(): Promise<void> {
 		`app root (HTTP ${ui.status})`,
 	);
 	check(html.includes('href="/api-docs"'), "docs link");
+	check(html.includes('id="remembered-list"'), "remembered mailbox selector");
+	check(html.includes('id="new-mailbox"'), "new mailbox action");
 	check(
 		html.includes('id="html-body"') && html.includes('id="delete-mailbox"'),
 		"HTML reader and mailbox deletion controls",
@@ -48,6 +50,7 @@ async function verifyWebmail(): Promise<void> {
 	for (const path of [
 		"/app/app.js",
 		"/app/api.js",
+		"/app/mailbox-store.js",
 		"/app/styles.css",
 		"/app/html-email.js",
 		"/app/vendor/purify.es.mjs",

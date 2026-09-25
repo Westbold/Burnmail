@@ -15,6 +15,22 @@
     <a href="/api-docs" target="_blank" rel="noopener noreferrer">API docs</a>
   </header>
   <main>
+    <section id="remembered" class="card remembered" aria-labelledby="remembered-title">
+      <div class="toolbar">
+        <h2 id="remembered-title">Mailboxes on this device</h2>
+        <button id="new-mailbox" type="button" class="secondary">New / other mailbox</button>
+      </div>
+      <p class="hint">Addresses and access keys are remembered only in this browser profile on this device, with no server sync. Anyone using this profile can open them.</p>
+      <div id="remembered-list" aria-live="polite"></div>
+      <p id="remembered-empty" class="hint">No mailboxes remembered yet. Open or create one below to save it here.</p>
+      <p id="storage-protection" class="hint" role="status">Checking local storage protection...</p>
+      <div class="actions">
+        <button id="protect-storage" type="button" class="secondary">Protect browser storage</button>
+        <button id="retry-remember" type="button" class="secondary" hidden>Retry remembering this mailbox</button>
+      </div>
+      <p id="storage-warning" class="storage-warning" role="status" hidden></p>
+      <p class="hint">No automatic checks of remembered mailboxes. Login checks only the mailbox you choose. Clearing site data or using private browsing can lose saved keys; keep private access-link backups.</p>
+    </section>
     <section id="login" class="card login">
       <p class="eyebrow">TEMPORARY MAIL. NOTHING EXTRA.</p>
       <h1>Your inbox, one key.</h1>
@@ -29,7 +45,7 @@
             <input id="key" name="key" type="password" autocomplete="off" spellcheck="false" required placeholder="The bearer key for this mailbox">
             <button id="generate" type="button" class="secondary">Generate key</button>
           </div>
-          <p class="hint">Save your key. There is no password reset or key recovery.</p>
+          <p class="hint">Successful logins and new claims are remembered on this device. Keep a private backup of your key; there is no password reset.</p>
           <div class="actions">
             <button type="submit" value="open">Open inbox</button>
             <button type="submit" value="claim" class="secondary">Claim &amp; open</button>
@@ -48,7 +64,7 @@
           <button id="delete-mailbox" type="button" class="danger">Delete mailbox</button>
         </div>
       </div>
-      <p class="hint">Save your access link before leaving. Anyone with it can read, delete, and release this inbox. Closing does not release the claim. Delete mailbox permanently removes all messages and releases the address.</p>
+      <p class="hint">This mailbox is remembered here when browser storage is available. Keep your access link private: it grants full access. Closing keeps the local entry. Forget removes only the local entry. Delete mailbox permanently removes all messages and releases the address.</p>
       <div class="workspace">
         <section class="card inbox" aria-label="Messages">
           <div class="toolbar"><h2>Messages</h2><button id="refresh" type="button" class="secondary">Refresh</button></div>

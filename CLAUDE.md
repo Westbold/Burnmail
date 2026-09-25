@@ -33,3 +33,8 @@ Do not bypass it with a plain Wrangler deployment or recreate existing D1 resour
 
 Keep code straightforward, typed, and small. Follow the repository's Biome formatting.
 Add regression tests for auth, runtime configuration, and message handling when changing them.
+
+Remembered mailbox credentials belong only in browser IndexedDB, never a server sync store.
+Do not validate or auto-login remembered entries on page load. Preserve new mailbox creation,
+local-only Forget, strict write durability, persistence permission requests, and visible save errors.
+Run the browser profile persistence tests alongside the HTML/deletion regression tests.

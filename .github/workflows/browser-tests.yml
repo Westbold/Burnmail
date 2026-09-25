@@ -24,7 +24,9 @@ jobs:
         run: |
           npm install --prefix /tmp/burnmail-browser --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.63.0
           node /tmp/burnmail-browser/node_modules/playwright/cli.js install --with-deps chromium firefox > /tmp/browser-install.log 2>&1 || { tail -80 /tmp/browser-install.log; exit 1; }
-      - name: Chromium and Firefox HTML security and deletion flows
+      - name: Chromium and Firefox HTML, deletion, and persistent mailbox flows
         env:
           PLAYWRIGHT_MODULE: /tmp/burnmail-browser/node_modules/playwright/index.mjs
-        run: node tests/browser/webmail.mjs
+        run: |
+          node tests/browser/webmail.mjs
+          node tests/browser/remembered.mjs

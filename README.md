@@ -37,6 +37,26 @@ are full-access credentials, not read-only links. Query links reach the server o
 first request and can be retained outside this application; prefer fragments when possible.
 The deployment enables Worker query-string log redaction. Do not share real links publicly.
 
+## Remembered mailboxes on this device
+
+Every successful webmail login (including access links) and newly created claim is saved
+in this browser profile using IndexedDB. Use **Login** beside a remembered address to reopen
+it without re-entering a key. The list makes no mailbox API requests until you choose Login;
+it does not auto-login, check for deletion, or prune inactive records. **New / other mailbox**
+keeps manual login and **Claim & open** available. Failed logins never replace a saved key.
+
+**Close inbox** keeps the remembered entry. **Forget** only removes it from this device;
+**Delete mailbox** still deletes the server mailbox and removes the matching local entry
+on success. All remembered addresses and recoverable keys remain on this device, not in a
+Cloudflare database or sync service. Only the selected inbox's key is sent for authentication.
+
+There is no app expiration. Writes request strict IndexedDB durability, and the app requests
+persistent-storage permission and displays the browser's actual decision. Denial does not
+stop local saving; a failed write displays a warning and retry. Clearing site data, private
+browsing, profile/device loss, or changing browser/origin can still lose remembered keys.
+Anyone with this browser profile can open saved mailboxes. Keep private access-link backups.
+See [webmail](documentation/06_frontend.md#device-local-remembered-mailboxes) for details.
+
 ## API quick start
 
 Set `API_BASE_URL` and `EMAIL_ADDRESS` privately in your shell or secret manager. This

@@ -36,7 +36,7 @@ Claim, email, and inbox endpoints require:
 Authorization: Bearer <claim-key>
 ```
 
-The Worker stores a SHA-256 hash of the bearer key. The original key is never stored.
+The Worker stores a SHA-256 hash of the bearer key. The original key is never stored by the Worker. The webmail client remembers access keys only in device-local IndexedDB.
 
 Claims are permanent and do not expire. A claim can be released only with the same bearer key
 that created it.

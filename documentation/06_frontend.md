@@ -25,8 +25,7 @@ incomplete query values are not combined with a fragment's values. Duplicates ar
 
 Query credentials are redirected to a fragment before the HTML is served. Responses
 use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The browser removes
-credentials from the current URL/history entry before starting API calls, keeps them
-only in memory, and uses the original bearer-header API. It never creates a claim from
+credentials from the current URL/history entry before starting API calls, uses the original bearer-header API, and remembers successful logins in device-local IndexedDB. It never creates a claim from
 a link. Opening fails for unclaimed inboxes or incorrect keys.
 
 A query link still sends credentials in the initial HTTPS request and can be retained
@@ -37,8 +36,11 @@ Both link forms grant full existing mailbox authority; neither is read-only or e
 ## Client behavior and safety
 
 Claiming requires an explicit **Claim & open** action. Generate a key and save it first.
-Credentials are never saved in cookies or local/session storage. Closing/reloading requires
-supplying the original key or link. Closing the UI does not release the address claim.
+Successful logins and newly created claims are remembered in IndexedDB in this browser
+profile. Closing the UI retains the remembered entry; refreshing lists saved mailboxes
+without opening or checking any of them. Login performs the existing authenticated read
+only for the selected mailbox. New / other mailbox always keeps manual login and claiming
+available. Cookies, localStorage, sessionStorage, and server-side sync are not used.
 
 Messages are listed 20 per page. Auto-refresh runs every 15 seconds on the first page
 while visible. Authorization errors pause polling. HTML is displayed by default when available, including inline styling, embedded styles,
@@ -55,7 +57,7 @@ application scripts remain same-origin only and no inline JavaScript is allowed.
 Delete message removes only the selected message. Delete mailbox requires typing the
 full mailbox address, calls the authenticated claim-deletion endpoint, permanently removes
 its stored messages, and releases the claim. Success clears the reader, aborts pending
-requests, clears in-memory credentials, and returns to login. A cancellation or failed
+requests, removes the matching local remembered entry, clears in-memory credentials, and returns to login. A cancellation or failed
 authorized request does not silently close the inbox. Other controls/polling are paused
 during deletion. The address can be claimed again; deletion is not a permanent address ban.
 
@@ -75,3 +77,37 @@ query/fragment parsing, malformed links, and preserved API behavior.
 Use `bun test`, `bun run tsc`, `bun run check`, and `bun run deploy --dry-run --outdir dist`.
 Set runtime secrets and private build settings before a real deploy. Live domains and
 hostname values must never be added to source, examples, tests, or documentation.
+
+## Device-local remembered mailboxes
+
+The database `burnmail-device-mailboxes`, version 1, has a `mailboxes` object store keyed
+by the exact trimmed address (matching the existing case-sensitive API), containing the
+address, opaque bearer key, and last successful use timestamp. One record per address;
+a failed login never overwrites a valid stored key. Keys never appear in switcher markup,
+change notifications, or logs. Email content remains in the existing server mailbox and
+is not copied into this client credential store. There is no account, cloud backup, sync
+endpoint, or bulk upload. Only an explicitly selected mailbox's key goes to the existing
+API Authorization header. Remembering itself performs no network requests.
+
+Records have no TTL, pruning schedule, or artificial limit. Writes request IndexedDB
+`durability: strict` and wait for transaction completion, falling back to the default
+transaction only on engines that reject the durability option. The app requests
+`navigator.storage.persist()` after saving and offers an explicit retry button. It shows
+whether persistence was granted instead of claiming guaranteed permanence. Browser denial,
+unsupported persistence, blocked/quota-exhausted storage, private-mode cleanup, manual site
+data deletion, profile removal, and changing origins cannot be overridden. Failed saves
+leave a working login and visible warning with a retry and access-link backup guidance.
+Storage errors never cause a cloud fallback or deletion/recreation of the local database.
+
+Forget requires confirmation and only removes the entry on this device; it does not delete
+the remote mailbox. Forgetting the active entry also closes the local session. Delete mailbox
+removes local credentials only after the existing authorized server deletion succeeds;
+cancellation and server failure preserve the record. A stale saved login stays listed with
+an error until the user chooses Forget or supplies a working key. Same-device tabs exchange
+only a key-free invalidation notice with BroadcastChannel and refresh local metadata on focus;
+there is no background validation, automatic login, or polling of inactive saved mailboxes.
+
+Keys must be recoverable for one-click access, so IndexedDB is not a password vault. Anyone
+with this browser profile, privileged extensions, or same-origin script execution can access
+them. Existing script CSP and opaque-origin HTML-email sandboxing remain in place. Keep
+private access links as backups; storage permission cannot prevent explicit deletion.

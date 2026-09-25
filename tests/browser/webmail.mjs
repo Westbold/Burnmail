@@ -193,6 +193,7 @@ try {
       assert.equal(await page.locator("#html-body").getAttribute("srcdoc"), null);
       assert.match(await page.locator("#status").textContent(), /permanently deleted/);
       assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+      assert.equal(await page.evaluate(async () => (await (await import("/app/mailbox-store.js")).listMailboxes()).length), 0, "successful mailbox deletion also forgets its device key");
       await page.goto(link.href);
       await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Address not claimed"));
       assert.equal(state.putCount, 0, "a deleted inbox link must not silently reclaim it");
