@@ -19,7 +19,9 @@ jobs:
         with:
           bun-version: latest
       - name: Prepare reviewed frontend changes
-        run: python .github/prepare-remembered.py
+        run: |
+          python .github/prepare-remembered.py
+          python .github/finalize-remembered.py
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
       - name: Tests, types, and lint
