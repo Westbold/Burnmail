@@ -9,6 +9,21 @@ def replace(name, before, after):
 replace('tests/browser/remembered.mjs',
     'res.writeHead(200, { "Content-Type": type }); res.end(await readFile(file));',
     'const data = await readFile(file);\n    res.writeHead(200, { "Content-Type": type }); res.end(data);')
+replace('tests/browser/remembered.mjs',
+    'await page.waitForFunction(email => !document.querySelector("#mailbox").hidden && document.querySelector("#mailbox-address").textContent === email && !document.querySelector("#new-mailbox").disabled, email);',
+    '''try {
+    await page.waitForFunction(email => !document.querySelector("#mailbox").hidden && document.querySelector("#mailbox-address").textContent === email && !document.querySelector("#new-mailbox").disabled, email);
+  } catch (error) {
+    console.error("Fixture login did not complete", await page.evaluate(() => ({ status: document.querySelector("#status").textContent, warning: document.querySelector("#storage-warning").textContent, loginVisible: !document.querySelector("#login").hidden, busy: document.querySelector("#new-mailbox").disabled })), { requestCount: calls.length });
+    throw error;
+  }''')
+replace('public/app/app.js',
+    '    remembered = records;\n    renderRemembered();',
+    '''    // Focusing a window must not replace buttons between pointerdown and click.
+    const changed = records.length !== remembered.length || records.some((record, index) =>
+      record.email !== remembered[index]?.email || record.lastUsedAt !== remembered[index]?.lastUsedAt);
+    remembered = records;
+    if (changed) renderRemembered();''')
 replace('public/app/app.js',
     'Closed. The mailbox is still remembered on this device; its claim and messages were not deleted.',
     'Closed. Any saved device entry was kept; the mailbox claim and messages were not deleted.')
