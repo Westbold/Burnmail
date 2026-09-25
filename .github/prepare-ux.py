@@ -6,7 +6,8 @@ req = urllib.request.Request(
     f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/git/blobs/f12821c6dd8c5aa578e545d7a9547632affb2836",
     headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json'})
 with urllib.request.urlopen(req, timeout=30) as response:
-    Path('public/app/index.html').write_bytes(base64.b64decode(json.load(response)['content']))
+    markup = base64.b64decode(json.load(response)['content']).decode()
+    Path('public/app/index.html').write_text(markup.replace('placeholder="Random if left blank"', 'placeholder="Random"'))
 
 p = Path('public/app/app.js')
 s = p.read_text()
@@ -19,7 +20,23 @@ after = before + '''
     return;
   }'''
 assert before in s
-p.write_text(s.replace(before, after))
+s = s.replace(before, after)
+before = '    address.textContent = record.email;'
+after = '''    const separator = record.email.lastIndexOf("@");
+    const local = document.createElement("span");
+    local.className = "address-local";
+    local.textContent = separator < 0 ? record.email : record.email.slice(0, separator);
+    const domain = document.createElement("span");
+    domain.className = "address-domain";
+    domain.textContent = separator < 0 ? "" : record.email.slice(separator);
+    address.title = record.email;
+    address.append(local, domain);'''
+assert before in s
+s = s.replace(before, after)
+s = s.replace('  byId("show-key").textContent = "Show";', '  byId("show-key").textContent = "Show";\n  byId("show-key").setAttribute("aria-label", "Show access key");')
+p.write_text(s)
+p = Path('public/app/styles.css')
+p.write_text(p.read_text() + '\n.address-local { display: block; overflow-wrap: anywhere; word-break: break-all; }\n.address-domain { display: block; font-size: 12px; color: #6a7483; font-weight: 400; overflow-wrap: anywhere; }\n')
 
 p = Path('tests/browser/webmail.mjs')
 s = p.read_text()
