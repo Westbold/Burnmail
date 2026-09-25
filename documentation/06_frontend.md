@@ -35,12 +35,11 @@ Both link forms grant full existing mailbox authority; neither is read-only or e
 
 ## Client behavior and safety
 
-Claiming requires an explicit **Claim & open** action. Generate a key and save it first.
+The **Create mailbox** action generates an access key automatically. A blank address creates a random mailbox; a supplied name creates that address.
 Successful logins and newly created claims are remembered in IndexedDB in this browser
 profile. Closing the UI retains the remembered entry; refreshing lists saved mailboxes
 without opening or checking any of them. Login performs the existing authenticated read
-only for the selected mailbox. New / other mailbox always keeps manual login and claiming
-available. Cookies, localStorage, sessionStorage, and server-side sync are not used.
+only for the selected mailbox. **New mailbox** and **Open existing** keep creation and manual login available. Cookies, localStorage, sessionStorage, and server-side sync are not used.
 
 Messages are listed 20 per page. Auto-refresh runs every 15 seconds on the first page
 while visible. Authorization errors pause polling. HTML is displayed by default when available, including inline styling, embedded styles,
@@ -111,3 +110,19 @@ Keys must be recoverable for one-click access, so IndexedDB is not a password va
 with this browser profile, privileged extensions, or same-origin script execution can access
 them. Existing script CSP and opaque-origin HTML-email sandboxing remain in place. Keep
 private access links as backups; storage permission cannot prevent explicit deletion.
+
+## Concise navigation
+
+An empty device goes straight to the Create/Open form; no empty saved-mailbox section is
+shown. Returning devices show only saved mailbox rows and New mailbox / Open existing
+actions. Selecting a row logs in without checking other saved mailboxes. The active inbox
+hides the home form and saved list. Mailboxes returns to the list; More contains access-link
+copying, new mailbox creation, and mailbox deletion. Only destructive actions ask for
+confirmation. Storage details and persistence controls live in Settings; real storage
+failures remain visible beside actionable retry/backup controls.
+
+No persistent success/instruction banners, routine storage notices, duplicate empty reader,
+or unnecessary pagination are shown. On narrow screens, reading a message replaces the
+list, and Inbox returns focus to that message. Keyboard focus, missing domains, storage
+failures, post-claim read failure, remembered-key durability, HTML isolation, and deletion
+remain covered by browser tests.

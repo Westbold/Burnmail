@@ -88,6 +88,11 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, "127.0.0.1", r));
 origin = `http://127.0.0.1:${server.address().port}`;
 
+async function clickDeleteMailbox(page) {
+  if (!await page.locator("#mailbox-options").evaluate(e => e.open)) await page.getByLabel("Mailbox options", { exact: true }).click();
+  await page.locator("#delete-mailbox").click();
+}
+
 try {
   for (const [name, engine] of [["chromium", chromium], ["firefox", firefox]]) {
     resetState();
@@ -148,7 +153,7 @@ try {
       await page.locator(".mail-item").filter({ hasText: "HTML-only fixture" }).click();
       await frame.locator("h2").waitFor();
       assert.equal(await frame.locator("h2").textContent(), "HTML-only rendering works");
-      assert.equal(await page.locator("#load-images").textContent(), "Load remote images");
+      assert.equal(await page.locator("#load-images").textContent(), "Show images");
       await page.locator(".mail-item").filter({ hasText: "Plain fixture" }).click();
       await page.locator("#body").waitFor({ state: "visible" });
       assert.equal(await page.locator("#body").textContent(), "Literal <b>plain</b> & safe");
@@ -157,15 +162,15 @@ try {
       console.log(`PASS ${name}: HTML layouts/styles/tables, script/form/frame isolation, links, image consent, text fallback, URL login`);
 
       page.once("dialog", dialog => dialog.dismiss());
-      await page.locator("#delete-mailbox").click();
+      await clickDeleteMailbox(page);
       assert.equal(state.deleteCount, 0);
       page.once("dialog", dialog => dialog.accept("wrong@example.test"));
-      await page.locator("#delete-mailbox").click();
+      await clickDeleteMailbox(page);
       assert.equal(state.deleteCount, 0);
       assert.equal(await page.locator("#mailbox").isVisible(), true);
       state.failDelete = true;
       page.once("dialog", dialog => dialog.accept(address));
-      await page.locator("#delete-mailbox").click();
+      await clickDeleteMailbox(page);
       await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Deletion denied"));
       assert.equal(state.exists, true);
       assert.equal(await page.locator("#mailbox").isVisible(), true);
@@ -176,7 +181,7 @@ try {
       await page.locator(".mail-item").filter({ hasText: "Formatted fixture" }).click();
       const count = state.deleteCount;
       page.once("dialog", dialog => { assert(dialog.message().includes("ALL stored messages")); return dialog.accept(address); });
-      await page.locator("#delete-mailbox").click();
+      await clickDeleteMailbox(page);
       assert.equal(await page.locator("#close").isEnabled(), false);
       assert.equal(await page.locator("#delete-mailbox").isEnabled(), false);
       await page.locator("#delete-mailbox").evaluate(e => e.click());

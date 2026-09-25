@@ -10,94 +10,136 @@
   <script type="module" src="/app/app.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to mailbox</a>
   <header class="topbar">
-    <a class="brand" href="/">BURNMAIL <span>INBOX</span></a>
-    <a href="/api-docs" target="_blank" rel="noopener noreferrer">API docs</a>
+    <a id="home-link" class="brand" href="/" aria-label="Burnmail home">BURNMAIL</a>
+    <nav class="header-links" aria-label="Utilities">
+      <a href="/api-docs" target="_blank" rel="noopener noreferrer">API docs</a>
+      <button id="settings-open" type="button" class="text-button">Settings</button>
+    </nav>
   </header>
-  <main>
-    <section id="remembered" class="card remembered" aria-labelledby="remembered-title">
-      <div class="toolbar">
-        <h2 id="remembered-title">Mailboxes on this device</h2>
-        <button id="new-mailbox" type="button" class="secondary">New / other mailbox</button>
-      </div>
-      <p class="hint">Addresses and access keys are remembered only in this browser profile on this device, with no server sync. Anyone using this profile can open them.</p>
-      <div id="remembered-list" aria-live="polite"></div>
-      <p id="remembered-empty" class="hint">No mailboxes remembered yet. Open or create one below to save it here.</p>
-      <p id="storage-protection" class="hint" role="status">Checking local storage protection...</p>
+  <main id="main">
+    <p id="loading" class="loading" role="status">Loading...</p>
+    <aside id="storage-alert" class="storage-alert" role="status" hidden>
+      <span id="storage-warning"></span>
       <div class="actions">
-        <button id="protect-storage" type="button" class="secondary">Protect browser storage</button>
-        <button id="retry-remember" type="button" class="secondary" hidden>Retry remembering this mailbox</button>
+        <button id="retry-remember" type="button" class="text-button" hidden>Retry saving</button>
+        <button id="copy-backup" type="button" class="text-button" hidden>Copy access link</button>
       </div>
-      <p id="storage-warning" class="storage-warning" role="status" hidden></p>
-      <p class="hint">No automatic checks of remembered mailboxes. Login checks only the mailbox you choose. Clearing site data or using private browsing can lose saved keys; keep private access-link backups.</p>
-    </section>
-    <section id="login" class="card login">
-      <p class="eyebrow">TEMPORARY MAIL. NOTHING EXTRA.</p>
-      <h1>Your inbox, one key.</h1>
-      <p>Open an existing mailbox, or claim an address before receiving mail.</p>
-      <form id="connect">
-        <fieldset id="credentials">
-          <label for="address">Mailbox address</label>
-          <input id="address" name="address" type="email" autocomplete="off" spellcheck="false" required placeholder="Enter the full email address">
-          <p id="domains" class="hint">Loading receiving domains...</p>
-          <label for="key">Claim key</label>
-          <div class="input-row">
-            <input id="key" name="key" type="password" autocomplete="off" spellcheck="false" required placeholder="The bearer key for this mailbox">
-            <button id="generate" type="button" class="secondary">Generate key</button>
-          </div>
-          <p class="hint">Successful logins and new claims are remembered on this device. Keep a private backup of your key; there is no password reset.</p>
-          <div class="actions">
-            <button type="submit" value="open">Open inbox</button>
-            <button type="submit" value="claim" class="secondary">Claim &amp; open</button>
-          </div>
-        </fieldset>
-      </form>
+    </aside>
+    <section id="home" class="home card" hidden>
+      <section id="remembered" aria-labelledby="remembered-title" hidden>
+        <div class="section-heading">
+          <h1 id="remembered-title" tabindex="-1">Mailboxes</h1>
+          <span id="remembered-count" class="badge" aria-label="Saved mailbox count"></span>
+        </div>
+        <ol id="remembered-list" class="remembered-list"></ol>
+        <div class="home-actions">
+          <button id="new-mailbox" type="button">New mailbox</button>
+          <button id="open-other" type="button" class="text-button">Open existing</button>
+        </div>
+      </section>
+      <section id="login" hidden>
+        <button id="back-saved" type="button" class="back-button" hidden>&larr; Mailboxes</button>
+        <h1 id="form-title" tabindex="-1">New mailbox</h1>
+        <div class="form-switch" role="group" aria-label="Mailbox action">
+          <button id="mode-create" type="button" aria-pressed="true">Create new</button>
+          <button id="mode-open" type="button" aria-pressed="false">Open existing</button>
+        </div>
+        <form id="create">
+          <fieldset id="create-fields">
+            <label for="name">Address <span class="optional">optional</span></label>
+            <div class="address-input">
+              <input id="name" name="name" type="text" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="[a-zA-Z0-9._+\-]+" placeholder="Random">
+              <span aria-hidden="true">@</span>
+              <select id="domain" name="domain" aria-label="Receiving domain" required><option value="">Loading...</option></select>
+            </div>
+            <div id="domain-error" class="field-error" hidden>
+              <span id="domains"></span>
+              <button id="retry-domains" type="button" class="text-button">Retry</button>
+            </div>
+            <button id="create-mailbox" class="submit" type="submit" disabled>Create mailbox</button>
+          </fieldset>
+        </form>
+        <form id="connect" hidden>
+          <fieldset id="credentials">
+            <label for="address">Email address</label>
+            <input id="address" name="address" type="email" autocomplete="off" autocapitalize="none" spellcheck="false" required placeholder="Your mailbox address">
+            <label for="key">Access key</label>
+            <div class="key-input">
+              <input id="key" name="key" type="password" autocomplete="off" spellcheck="false" required>
+              <button id="show-key" type="button" class="text-button" aria-label="Show access key" aria-pressed="false">Show</button>
+            </div>
+            <button id="open-mailbox" class="submit" type="submit" value="open">Open mailbox</button>
+          </fieldset>
+        </form>
+      </section>
     </section>
 
     <section id="mailbox" hidden>
+      <button id="close" type="button" class="back-button">&larr; Mailboxes</button>
       <div class="mailbox-heading">
-        <div><p class="eyebrow">YOUR MAILBOX</p><h1 id="mailbox-address"></h1></div>
+        <h1 id="mailbox-address" tabindex="-1"></h1>
         <div class="actions">
           <button id="copy-address" type="button" class="secondary">Copy address</button>
-          <button id="copy-link" type="button" class="secondary">Copy access link</button>
-          <button id="close" type="button" class="secondary">Close inbox</button>
-          <button id="delete-mailbox" type="button" class="danger">Delete mailbox</button>
+          <details id="mailbox-options" class="more">
+            <summary aria-label="Mailbox options">More <span aria-hidden="true">&#8964;</span></summary>
+            <div class="more-panel">
+              <button id="copy-link" type="button">Copy access link</button>
+              <button id="create-another" type="button">New mailbox</button>
+              <button id="delete-mailbox" type="button" class="danger">Delete mailbox</button>
+            </div>
+          </details>
         </div>
       </div>
-      <p class="hint">This mailbox is remembered here when browser storage is available. Keep your access link private: it grants full access. Closing keeps the local entry. Forget removes only the local entry. Delete mailbox permanently removes all messages and releases the address.</p>
-      <div class="workspace">
+      <div id="workspace" class="workspace">
         <section class="card inbox" aria-label="Messages">
-          <div class="toolbar"><h2>Messages</h2><button id="refresh" type="button" class="secondary">Refresh</button></div>
-          <p class="hint">Auto-refresh every 15 seconds on the newest page while this tab is visible.</p>
+          <div class="toolbar">
+            <h2>Inbox <span id="message-count" class="badge"></span></h2>
+            <button id="refresh" type="button" class="text-button" title="Refresh inbox">Refresh</button>
+          </div>
           <div id="messages" aria-live="polite"></div>
-          <nav class="pagination" aria-label="Message pages">
-            <button id="previous" type="button" class="secondary" disabled>Newer</button>
-            <span id="page" class="hint"></span>
-            <button id="next" type="button" class="secondary" disabled>Older</button>
+          <nav id="pagination" class="pagination" aria-label="Message pages" hidden>
+            <button id="previous" type="button" class="text-button" disabled>Newer</button>
+            <span id="page" class="muted"></span>
+            <button id="next" type="button" class="text-button" disabled>Older</button>
           </nav>
         </section>
-        <section class="card reader" aria-label="Message reader">
-          <p id="reader-empty" class="empty">Select a message to read it.</p>
+        <section id="reader" class="card reader" aria-label="Message reader" hidden>
+          <button id="reader-back" type="button" class="back-button">&larr; Inbox</button>
+          <p id="reader-empty" class="empty">Select a message</p>
           <article id="message" hidden>
-            <div class="toolbar"><h2 id="subject"></h2><button id="delete" type="button" class="danger">Delete message</button></div>
-            <p id="sender" class="hint"></p>
-            <p id="received" class="hint"></p>
-            <p id="body-kind" class="hint"></p>
-            <div id="body-controls" class="actions body-controls" hidden>
-              <button id="view-html" type="button" class="secondary" aria-pressed="true">HTML</button>
-              <button id="view-text" type="button" class="secondary" aria-pressed="false">Text</button>
-              <button id="load-images" type="button" class="secondary">Load remote images</button>
+            <div class="toolbar message-heading">
+              <h2 id="subject" tabindex="-1"></h2>
+              <button id="delete" type="button" class="text-button danger">Delete message</button>
             </div>
-            <p id="image-warning" class="hint" hidden>Remote images are blocked for privacy. Loading them may tell the sender that you opened this message.</p>
+            <div class="message-meta"><p id="sender"></p><p id="received"></p></div>
+            <div id="body-controls" class="body-controls" hidden>
+              <div class="view-switch" role="group" aria-label="Message format">
+                <button id="view-html" type="button" aria-pressed="true">HTML</button>
+                <button id="view-text" type="button" aria-pressed="false">Text</button>
+              </div>
+              <button id="load-images" type="button" class="text-button" title="External images may notify the sender">Show images</button>
+            </div>
+            <p id="body-kind" class="field-error" hidden></p>
             <iframe id="html-body" title="HTML email content" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="about:blank" hidden></iframe>
             <pre id="body"></pre>
           </article>
         </section>
       </div>
     </section>
-    <p id="status" role="status" aria-live="polite"></p>
-    <noscript>This inbox needs JavaScript to call the API. No messages are embedded in this page.</noscript>
+    <p id="status" role="status" aria-live="polite" hidden></p>
+    <noscript>Enable JavaScript to use Burnmail.</noscript>
   </main>
-  <footer>Receive only. Messages are temporary; claims persist until released. No attachments.</footer>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="toolbar">
+      <h2 id="settings-title">Device storage</h2>
+      <button id="settings-close" type="button" class="text-button" aria-label="Close settings">Close</button>
+    </div>
+    <p>Mailbox keys stay in this browser. Anyone using this profile can open them.</p>
+    <p id="storage-protection" class="muted" role="status"></p>
+    <button id="protect-storage" type="button" class="secondary" hidden>Protect storage</button>
+    <p class="muted settings-note">Clearing site data removes saved keys. Keep private access-link backups.</p>
+  </dialog>
 </body>
 </html>

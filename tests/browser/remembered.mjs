@@ -50,12 +50,23 @@ async function opened(page, email) {
   }
 }
 async function login(page, email, key, claim = false) {
-  await page.locator("#new-mailbox").click();
-  await page.locator("#address").fill(email); await page.locator("#key").fill(key);
-  if (claim) page.once("dialog", d => d.accept());
-  await page.locator(`#connect button[value=${claim ? "claim" : "open"}]`).click();
+  await page.locator("#home-link").click();
+  if (await page.locator("#remembered").isVisible()) {
+    await page.locator(claim ? "#new-mailbox" : "#open-other").click();
+  } else {
+    await page.locator(claim ? "#mode-create" : "#mode-open").click();
+  }
+  if (claim) {
+    await page.locator("#name").fill(email.split("@")[0]);
+    await page.locator("#create-mailbox").click();
+  } else {
+    await page.locator("#address").fill(email); await page.locator("#key").fill(key);
+    await page.locator("#open-mailbox").click();
+  }
 }
-async function recall(page, email) { await page.getByRole("button", { name: `Login to ${email}`, exact: true }).click(); }
+async function recall(page, email) {
+  if (!await page.locator("#remembered").isVisible()) await page.locator("#home-link").click();
+  await page.getByRole("button", { name: `Login to ${email}`, exact: true }).click(); }
 try {
   for (const [name, engine] of [["chromium", chromium], ["firefox", firefox]]) {
     boxes = new Map([[alpha, fixtureKey], [beta, fixtureKey]]); calls = []; deletions = 0; creations = 0;
@@ -88,27 +99,31 @@ try {
       calls = []; await page.reload(); await count(page, 2);
       assert.deepEqual(calls, [], "deleted server mailboxes remain listed without background checks");
       await recall(page, alpha);
-      await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Saved mailbox could not be opened"));
+      await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Mailbox no longer exists"));
       await count(page, 2); assert.equal(creations, 0);
       await login(page, beta, "wrong-fixture-key");
       await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Wrong key"));
       await recall(page, beta); await opened(page, beta);
       await login(page, gamma, fixtureKey, true); await opened(page, gamma); await count(page, 3);
       assert.equal(creations, 1);
+      await page.locator("#close").click();
       page.once("dialog", d => d.dismiss());
       await page.getByRole("button", { name: `Forget ${alpha} on this device`, exact: true }).click();
       await count(page, 3);
       page.once("dialog", d => d.accept());
       await page.getByRole("button", { name: `Forget ${alpha} on this device`, exact: true }).click();
       await count(page, 2); assert.equal(deletions, 0, "Forget never deletes server mailboxes");
+      await recall(page, gamma); await opened(page, gamma);
+      await page.getByLabel("Mailbox options", { exact: true }).click();
       page.once("dialog", d => d.accept(gamma)); await page.locator("#delete-mailbox").click();
-      await page.locator("#login").waitFor({ state: "visible" }); await count(page, 1);
+      await page.locator("#remembered").waitFor({ state: "visible" }); await count(page, 1);
       assert.equal(deletions, 1); assert.equal(boxes.has(beta), true); assert.equal(boxes.has(gamma), false);
       await recall(page, beta); await opened(page, beta);
       assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
       assert.equal((await context.cookies()).length, 0);
       assert.equal((await page.content()).includes(fixtureKey), false, "remembered keys are not in page markup");
       const other = await context.newPage(); await other.goto(origin); await count(other, 1);
+      await page.locator("#close").click();
       page.once("dialog", d => d.accept());
       await page.getByRole("button", { name: `Forget ${beta} on this device`, exact: true }).click();
       await count(page, 0); await count(other, 0);

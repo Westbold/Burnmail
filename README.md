@@ -40,12 +40,11 @@ The deployment enables Worker query-string log redaction. Do not share real link
 ## Remembered mailboxes on this device
 
 Every successful webmail login (including access links) and newly created claim is saved
-in this browser profile using IndexedDB. Use **Login** beside a remembered address to reopen
-it without re-entering a key. The list makes no mailbox API requests until you choose Login;
-it does not auto-login, check for deletion, or prune inactive records. **New / other mailbox**
-keeps manual login and **Claim & open** available. Failed logins never replace a saved key.
+in this browser profile using IndexedDB. Select a remembered address to reopen
+it without re-entering a key. The list makes no mailbox API requests until you select a mailbox;
+it does not auto-login, check for deletion, or prune inactive records. **New mailbox** generates an access key automatically; **Open existing** accepts an address and key. Failed logins never replace a saved key.
 
-**Close inbox** keeps the remembered entry. **Forget** only removes it from this device;
+**Mailboxes** returns to the saved list without deleting anything. **Forget** only removes it from this device;
 **Delete mailbox** still deletes the server mailbox and removes the matching local entry
 on success. All remembered addresses and recoverable keys remain on this device, not in a
 Cloudflare database or sync service. Only the selected inbox's key is sent for authentication.
