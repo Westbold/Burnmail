@@ -105,7 +105,12 @@ export class DatabaseService {
 		try {
 			const { results, error } = await this.db
 				.prepare(
-					"SELECT id, from_address, to_address, subject, received_at, html_content, text_content FROM emails WHERE to_address = ? AND received_at >= ? AND (received_at > ? OR (received_at = ? AND id > ?)) ORDER BY received_at ASC, id ASC LIMIT ?",
+					`SELECT id, from_address, to_address, subject, received_at, html_content, text_content
+         FROM emails
+         WHERE to_address = ? AND received_at >= ?
+           AND (received_at > ? OR (received_at = ? AND id > ?))
+         ORDER BY received_at ASC, id ASC
+         LIMIT ?`,
 				)
 				.bind(emailAddress, since, afterTimestamp, afterTimestamp, afterId, limit)
 				.all();

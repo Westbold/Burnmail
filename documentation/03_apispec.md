@@ -271,63 +271,26 @@ Response:
 
 ## Reconciliation
 
-### Recover stored messages for one claimed address
-
 ```http
 GET /reconciliation/{emailAddress}?since=1753317900&limit=20&cursor=1753317948:usm2sw0qfv9a5ku9z4xmh8og
 Authorization: Bearer <claim-key>
 ```
 
-Authorization is **per mailbox**, using its existing claim key.
-This is not an administrative API and does not grant access to other claims.
-No new Worker secrets or schema migrations are required.
+Returns the same complete fields as [webhook delivery](#webhook-delivery) for
+one claimed address, authorized by that address's existing key.
+`since` is a required inclusive Unix timestamp (seconds). `limit` defaults to
+20 (maximum 25); `cursor` is the previous response's `next_cursor`.
 
-Query parameters:
+The response is `{ "success": true, "result": { "messages": [...], "next_cursor": null } }`.
+Messages are ordered by `(received_at, id)` ascending; a non-null
+`next_cursor` indicates another page. Keep `since` fixed while paging.
+Responses are non-cacheable. Errors: `400` invalid query, `401` missing key,
+`403` wrong key, `404` unknown claim/domain, `500` database error.
 
-- `since` (required): Unix timestamp, inclusive, in whole seconds (`>= 0`).
-- `limit` (optional): 1–25 full messages per page, default 20.
-- `cursor` (optional): `next_cursor` from the preceding response. Keep
-  `since` unchanged across one paginated scan.
-
-Success (`200`):
-
-```json
-{
-  "success": true,
-  "result": {
-    "messages": [
-      {
-        "id": "usm2sw0qfv9a5ku9z4xmh8og",
-        "from_address": "sender@example.com",
-        "to_address": "recipient@example.test",
-        "subject": "Welcome to our service",
-        "received_at": 1753317948,
-        "html_content": "<p>Hello world</p>",
-        "text_content": "Hello world"
-      }
-    ],
-    "next_cursor": null
-  }
-}
-```
-
-`next_cursor` is non-null only when another page exists. Ordering is
-ascending by `(received_at, id)`, so messages with equal Unix-second
-timestamps paginate without offsets. Responses set `Cache-Control: no-store`.
-
-Errors: `400` invalid query/cursor, `401` missing bearer key, `403`
-incorrect mailbox key, `404` unclaimed address or unsupported domain,
-`500` database failure.
-
-**Reconciliation consumer requirements:** Upsert or deduplicate by the
-immutable email `id` (shared with webhook payloads). A late insertion
-within the current second can sort before an already-issued cursor.
-Therefore, do not use `cursor` as a permanent checkpoint. Start every
-reconciliation pass with a slightly overlapping `since` timestamp
-(e.g. 2 minutes before the last completed scan), page to completion,
-then record the completed scan time. The endpoint can recover only mail
-still stored in Burnmail: expiration and deletion are irreversible.
-The current retention threshold is three hours, with periodic cleanup.
+For recovery, deduplicate against webhook deliveries by message `id` and
+repeat scans with an overlapping `since` window. Do not persist a page
+cursor as a sync watermark: late arrivals with the same timestamp can
+sort before it. Only messages still retained by Burnmail are recoverable.
 
 ## Domains
 
