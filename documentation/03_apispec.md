@@ -269,6 +269,55 @@ Response:
 }
 ```
 
+## Reconciliation
+
+```http
+GET /reconciliation/{emailAddress}?since=1753317900&limit=20&offset=0
+Authorization: Bearer <claim-key>
+```
+
+Returns complete emails for one claimed address using its existing claim key.
+`since` is a required inclusive Unix timestamp in seconds; `limit` defaults to 20
+(maximum 25), and `offset` defaults to 0. Results are ordered by `(received_at, id)`
+ascending. The response follows the Phoneblur paginated-list shape inside Burnmail's
+normal `success`/`result` envelope:
+
+```json
+{
+  "success": true,
+  "result": {
+    "data": [{
+      "id": "usm2sw0qfv9a5ku9z4xmh8og",
+      "from_address": "sender@example.com",
+      "to_address": "recipient@example.test",
+      "subject": "Welcome",
+      "received_at": 1753317948,
+      "html_content": "<p>Hello</p>",
+      "text_content": "Hello"
+    }],
+    "hasNext": true,
+    "links": {
+      "next": {
+        "method": "GET",
+        "href": "https://api.example.test/reconciliation/recipient@example.test?since=1753317900&limit=20&offset=20"
+      }
+    }
+  }
+}
+```
+
+`data` contains full stored emails (the same fields and IDs as webhook delivery).
+Follow the **absolute** `links.next.href` with the same bearer header while
+`hasNext` is true. On the final page `hasNext` is false and `links` is empty.
+Links use the request origin and never contain authorization credentials.
+Responses are non-cacheable. Errors: `400` invalid parameters, `401` missing key,
+`403` wrong key, `404` unknown claim/domain, `500` database failure.
+
+Deduplicate against webhook messages by `id`. Offset pagination is not a snapshot:
+messages received or deleted mid-scan can shift page boundaries. Reconcile
+repeatedly using an overlapping `since` window. Already-expired or deleted
+messages cannot be recovered.
+
 ## Domains
 
 The allowlist comes from the `EMAIL_DOMAINS` Worker secret. The addresses below are reserved

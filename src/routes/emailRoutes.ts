@@ -18,6 +18,7 @@ import {
 	getEmailRoute,
 	getEmailsCountRoute,
 	getEmailsRoute,
+	reconcileEmailsRoute,
 	releaseAddressClaimRoute,
 } from "@/schemas/emails/routeDefinitions";
 
@@ -262,6 +263,52 @@ emailRoutes.openapi(deleteEmailRoute, async (c) => {
 	if (error) return c.json(ERR(error.message, "D1Error"), 500);
 	if (meta && meta.changes === 0) return c.json(ERR("Email not found", "NotFound"), 404);
 	return c.json(OK({ message: "Email deleted successfully" }));
+});
+
+// @ts-ignore - OpenAPI route handler type mismatch with error response status codes
+emailRoutes.openapi(reconcileEmailsRoute, async (c) => {
+	c.header("Cache-Control", "no-store");
+	const { emailAddress } = c.req.valid("param");
+	const { since, limit, offset } = c.req.valid("query");
+
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
+	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
+
+	const authorization = await getAuthorizationHash(c);
+	if ("error" in authorization) return c.json(authorization.error, authorization.status);
+
+	const dbService = createDatabaseService(c.env.D1);
+	const claimAuthorization = await authorizeClaim(
+		dbService,
+		emailAddress,
+		authorization.authKeyHash,
+	);
+	if ("error" in claimAuthorization)
+		return c.json(claimAuthorization.error, claimAuthorization.status);
+
+	const { results, error } = await dbService.getEmailsForReconciliation(
+		emailAddress,
+		since,
+		limit + 1,
+		offset,
+	);
+	if (error) return c.json(ERR(error.message, "D1Error"), 500);
+
+	const hasNext = results.length > limit;
+	const next = new URL(c.req.url);
+	next.search = new URLSearchParams({
+		since: String(since),
+		limit: String(limit),
+		offset: String(offset + limit),
+	}).toString();
+
+	return c.json(
+		OK({
+			data: results.slice(0, limit),
+			hasNext,
+			links: hasNext ? { next: { method: "GET", href: next.href } } : {},
+		}),
+	);
 });
 
 emailRoutes.openapi(getDomainsRoute, async (c) => {

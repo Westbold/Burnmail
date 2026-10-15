@@ -41,6 +41,21 @@ export const emailQuerySchema = z.object({
 	}),
 });
 
+export const reconciliationQuerySchema = z.object({
+	since: z.coerce.number().int().min(0).openapi({
+		example: 1753317900,
+		description: "Inclusive Unix timestamp for recovery.",
+	}),
+	limit: z.coerce.number().int().min(1).max(25).optional().default(20).openapi({
+		example: 20,
+		description: "Complete messages per page (1-25).",
+	}),
+	offset: z.coerce.number().int().min(0).optional().default(0).openapi({
+		example: 0,
+		description: "Number of messages to skip.",
+	}),
+});
+
 // Email object schemas
 export const emailSchema = z
 	.object({
@@ -163,6 +178,19 @@ export const emailListSuccessResponseSchema = z
 		result: z.array(emailSummarySchema),
 	})
 	.openapi("EmailListSuccessResponse");
+
+export const reconciliationSuccessResponseSchema = z
+	.object({
+		success: z.literal(true),
+		result: z.object({
+			data: z.array(emailSchema),
+			hasNext: z.boolean(),
+			links: z.object({
+				next: z.object({ method: z.literal("GET"), href: z.url() }).optional(),
+			}),
+		}),
+	})
+	.openapi("ReconciliationSuccessResponse");
 
 export const emailDetailSuccessResponseSchema = z
 	.object({
