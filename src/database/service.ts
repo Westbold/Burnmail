@@ -98,9 +98,8 @@ export class DatabaseService {
 	async getEmailsForReconciliation(
 		emailAddress: string,
 		since: number,
-		afterTimestamp: number,
-		afterId: string,
 		limit: number,
+		offset: number,
 	) {
 		try {
 			const { results, error } = await this.db
@@ -108,11 +107,10 @@ export class DatabaseService {
 					`SELECT id, from_address, to_address, subject, received_at, html_content, text_content
          FROM emails
          WHERE to_address = ? AND received_at >= ?
-           AND (received_at > ? OR (received_at = ? AND id > ?))
          ORDER BY received_at ASC, id ASC
-         LIMIT ?`,
+         LIMIT ? OFFSET ?`,
 				)
-				.bind(emailAddress, since, afterTimestamp, afterTimestamp, afterId, limit)
+				.bind(emailAddress, since, limit, offset)
 				.all();
 			return { results: results as Email[], error };
 		} catch (e: unknown) {

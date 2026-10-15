@@ -269,7 +269,7 @@ emailRoutes.openapi(deleteEmailRoute, async (c) => {
 emailRoutes.openapi(reconcileEmailsRoute, async (c) => {
 	c.header("Cache-Control", "no-store");
 	const { emailAddress } = c.req.valid("param");
-	const { since, limit, cursor } = c.req.valid("query");
+	const { since, limit, offset } = c.req.valid("query");
 
 	const domainValidation = validateEmailDomain(emailAddress, c.env);
 	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
@@ -286,27 +286,27 @@ emailRoutes.openapi(reconcileEmailsRoute, async (c) => {
 	if ("error" in claimAuthorization)
 		return c.json(claimAuthorization.error, claimAuthorization.status);
 
-	const [cursorTime, cursorId] = cursor?.split(":") ?? [String(since), ""];
-	const afterTimestamp = Number(cursorTime);
-	if (!Number.isSafeInteger(afterTimestamp) || afterTimestamp < since) {
-		return c.json(ERR("Invalid reconciliation cursor", "ValidationError"), 400);
-	}
-
 	const { results, error } = await dbService.getEmailsForReconciliation(
 		emailAddress,
 		since,
-		afterTimestamp,
-		cursorId,
 		limit + 1,
+		offset,
 	);
 	if (error) return c.json(ERR(error.message, "D1Error"), 500);
 
-	const messages = results.slice(0, limit);
-	const last = messages.at(-1);
+	const hasNext = results.length > limit;
+	const next = new URL(c.req.url);
+	next.search = new URLSearchParams({
+		since: String(since),
+		limit: String(limit),
+		offset: String(offset + limit),
+	}).toString();
+
 	return c.json(
 		OK({
-			messages,
-			next_cursor: results.length > limit && last ? `${String(last.received_at)}:${last.id}` : null,
+			data: results.slice(0, limit),
+			hasNext,
+			links: hasNext ? { next: { method: "GET", href: next.href } } : {},
 		}),
 	);
 });

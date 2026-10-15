@@ -325,9 +325,9 @@ export const reconcileEmailsRoute = createRoute({
 	responses: {
 		200: {
 			content: { "application/json": { schema: reconciliationSuccessResponseSchema } },
-			description: "Full stored emails in chronological, cursor-paginated order",
+			description: "Full stored emails with navigable pagination links",
 		},
-		400: { content: errorJson, description: "Invalid query or continuation cursor" },
+		400: { content: errorJson, description: "Invalid reconciliation query" },
 		401: unauthorizedResponse,
 		403: forbiddenResponse,
 		404: { content: errorJson, description: "Unsupported domain or address not claimed" },
@@ -336,7 +336,7 @@ export const reconcileEmailsRoute = createRoute({
 	tags: ["Reconciliation"],
 	summary: "Reconcile missed inbound emails",
 	description:
-		"Retrieve stored full messages for one claimed mailbox using its own claim key. Records expire according to retention; repeat with a small overlapping since window and deduplicate by message ID.",
+		"Retrieve stored full messages for one claimed mailbox. Follow links.next while hasNext; repeat with an overlapping since window and deduplicate by message ID.",
 });
 
 // Get domains route

@@ -41,18 +41,12 @@ class FakeD1Statement {
 
 		if (this.sql.includes("ORDER BY received_at ASC")) {
 			if (this.db.failReconciliation) throw new Error("Simulated D1 failure");
-			const [recipient, since, after, , afterId, limit] = this.values;
+			const [recipient, since, limit, offset] = this.values;
 			return {
 				results: [...this.db.emails.values()]
-					.filter(
-						(email) =>
-							email.to_address === recipient &&
-							email.received_at >= Number(since) &&
-							(email.received_at > Number(after) ||
-								(email.received_at === Number(after) && email.id > String(afterId))),
-					)
+					.filter((email) => email.to_address === recipient && email.received_at >= Number(since))
 					.sort((a, b) => a.received_at - b.received_at || a.id.localeCompare(b.id))
-					.slice(0, Number(limit)),
+					.slice(Number(offset), Number(offset) + Number(limit)),
 			};
 		}
 
@@ -121,7 +115,7 @@ const makeEmail = (id: string, received_at: number, to_address = RECIPIENT): Ema
 
 function reconcile(db: FakeD1, query: string, key?: string, address = RECIPIENT) {
 	return app.request(
-		`/reconciliation/${address}${query}`,
+		`https://api.example.test/reconciliation/${address}${query}`,
 		{ headers: key ? { Authorization: `Bearer ${key}` } : {} },
 		makeEnv(db),
 	);
@@ -139,8 +133,15 @@ function claim(db: FakeD1, address = RECIPIENT, key = "claim-secret") {
 }
 
 async function readPage(response: Response) {
-	return ((await response.json()) as { result: { messages: Email[]; next_cursor: string | null } })
-		.result;
+	return (
+		(await response.json()) as {
+			result: {
+				data: Email[];
+				hasNext: boolean;
+				links: { next?: { method: "GET"; href: string } };
+			};
+		}
+	).result;
 }
 
 describe("email route access control", () => {
@@ -274,7 +275,7 @@ describe("email route access control", () => {
 		expect(db.emails.size).toBe(0);
 	});
 
-	test("recovers full messages with stable cursors and overlapping scans", async () => {
+	test("follows absolute Phoneblur-style links to recover full messages", async () => {
 		const db = new FakeD1();
 		await claim(db);
 		await claim(db, "other@example.test", "other-key");
@@ -292,24 +293,60 @@ describe("email route access control", () => {
 		expect(first.status).toBe(200);
 		expect(first.headers.get("Cache-Control")).toBe("no-store");
 		const page1 = await readPage(first);
-		expect(page1.messages).toEqual([makeEmail("a1", 100), makeEmail("c3", 100)]);
-		expect(page1.next_cursor).toBe("100:c3");
+		expect(page1.data).toEqual([makeEmail("a1", 100), makeEmail("c3", 100)]);
+		expect(page1.hasNext).toBe(true);
+		expect(page1.links.next).toEqual({
+			method: "GET",
+			href: `https://api.example.test/reconciliation/${RECIPIENT}?since=100&limit=2&offset=2`,
+		});
 
-		db.emails.set("b2", makeEmail("b2", 100)); // Arrives before the current cursor.
-		const page2 = await readPage(
-			await reconcile(db, "?since=100&limit=2&cursor=100:c3", "claim-secret"),
+		const next = page1.links.next;
+		if (!next) throw new Error("Expected a next-page link");
+		const second = await app.request(
+			next.href,
+			{ method: next.method, headers: { Authorization: "Bearer claim-secret" } },
+			makeEnv(db),
 		);
-		expect(page2.messages).toEqual([makeEmail("d4", 100), makeEmail("e5", 101)]);
-		expect(page2.next_cursor).toBeNull();
+		const page2 = await readPage(second);
+		expect(page2.data).toEqual([makeEmail("d4", 100), makeEmail("e5", 101)]);
+		expect(page2.hasNext).toBe(false);
+		expect(page2.links).toEqual({});
+	});
+
+	test("an overlapping scan recovers late inserts between offset pages", async () => {
+		const db = new FakeD1();
+		await claim(db);
+		for (const email of [
+			makeEmail("a1", 100),
+			makeEmail("c3", 100),
+			makeEmail("d4", 100),
+			makeEmail("e5", 101),
+		])
+			db.emails.set(email.id, email);
+		const first = await readPage(await reconcile(db, "?since=100&limit=2", "claim-secret"));
+		db.emails.set("b2", makeEmail("b2", 100));
+
+		const received = first.data.map((email) => email.id);
+		let link = first.links.next;
+		while (link) {
+			const response = await app.request(
+				link.href,
+				{ method: link.method, headers: { Authorization: "Bearer claim-secret" } },
+				makeEnv(db),
+			);
+			const page = await readPage(response);
+			received.push(...page.data.map((email) => email.id));
+			link = page.links.next;
+		}
+		expect(received).toEqual(["a1", "c3", "c3", "d4", "e5"]);
 		const rescan = await readPage(await reconcile(db, "?since=100", "claim-secret"));
-		expect(rescan.messages.map((email) => email.id)).toEqual(["a1", "b2", "c3", "d4", "e5"]);
+		expect(rescan.data.map((email) => email.id)).toEqual(["a1", "b2", "c3", "d4", "e5"]);
 	});
 
 	test("reconciliation enforces claim keys, limits, and database errors", async () => {
 		const db = new FakeD1();
 		await claim(db);
 		await claim(db, "other@example.test", "other-key");
-
 		expect((await reconcile(db, "?since=0")).status).toBe(401);
 		expect((await reconcile(db, "?since=0", "wrong-key")).status).toBe(403);
 		expect((await reconcile(db, "?since=0", "claim-secret", "other@example.test")).status).toBe(
@@ -328,12 +365,11 @@ describe("email route access control", () => {
 			"?since=no",
 			"?since=0&limit=0",
 			"?since=0&limit=26",
-			"?since=0&cursor=bad",
-			"?since=100&cursor=99:a1",
-			"?since=0&cursor=999999999999999999999999:a1",
-		]) {
+			"?since=0&offset=-1",
+			"?since=0&offset=1.5",
+			"?since=0&offset=abc",
+		])
 			expect((await reconcile(db, query, "claim-secret")).status).toBe(400);
-		}
 		db.failReconciliation = true;
 		expect((await reconcile(db, "?since=0", "claim-secret")).status).toBe(500);
 	});

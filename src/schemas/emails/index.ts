@@ -50,15 +50,10 @@ export const reconciliationQuerySchema = z.object({
 		example: 20,
 		description: "Complete messages per page (1-25).",
 	}),
-	cursor: z
-		.string()
-		.regex(/^[0-9]+:[a-z0-9]+$/)
-		.max(96)
-		.optional()
-		.openapi({
-			example: "1753317948:usm2sw0qfv9a5ku9z4xmh8og",
-			description: "Cursor from the previous page; keep since unchanged.",
-		}),
+	offset: z.coerce.number().int().min(0).optional().default(0).openapi({
+		example: 0,
+		description: "Number of messages to skip.",
+	}),
 });
 
 // Email object schemas
@@ -188,8 +183,11 @@ export const reconciliationSuccessResponseSchema = z
 	.object({
 		success: z.literal(true),
 		result: z.object({
-			messages: z.array(emailSchema),
-			next_cursor: z.string().nullable(),
+			data: z.array(emailSchema),
+			hasNext: z.boolean(),
+			links: z.object({
+				next: z.object({ method: z.literal("GET"), href: z.url() }).optional(),
+			}),
 		}),
 	})
 	.openapi("ReconciliationSuccessResponse");

@@ -97,7 +97,7 @@ OpenAPI document at `/openapi.json`. The API explorer uses the current origin.
 | `DELETE` | `/claims/{emailAddress}` | Release the claim and delete its messages |
 | `GET` | `/emails/{emailAddress}` | List summaries, newest first; `limit` and `offset` supported |
 | `GET` | `/emails/count/{emailAddress}` | Count messages |
-| `GET` | `/reconciliation/{emailAddress}` | Recover full messages by timestamp and cursor |
+| `GET` | `/reconciliation/{emailAddress}` | Recover full messages through pagination links |
 | `DELETE` | `/emails/{emailAddress}` | Delete messages without releasing the claim |
 | `GET` | `/inbox/{emailId}` | Retrieve a complete stored message |
 | `DELETE` | `/inbox/{emailId}` | Delete one message |
@@ -165,9 +165,9 @@ is sent as JSON with `X-Webhook-Signature: HMAC-SHA512=<base64 signature>`, comp
 exact UTF-8 request body. Delivery failures are logged without deleting the stored message;
 there is no durable webhook retry queue. See [webhook details](documentation/03_apispec.md#webhook-delivery).
 Recover missed messages through the authenticated
-[reconciliation API](documentation/03_apispec.md#reconciliation), paging by cursor and
-deduplicating by message ID. Scan with a small overlapping timestamp window; expired
-or deleted messages cannot be recovered.
+[reconciliation API](documentation/03_apispec.md#reconciliation). Follow
+`result.links.next.href` while `result.hasNext`, deduplicating by message ID.
+Rescan with an overlapping time window; expired mail cannot be recovered.
 
 The webmail renders sanitized HTML in an isolated, scriptless frame, with a Text alternative
 and per-message opt-in for remote images. The server's basic cleanup is not a substitute

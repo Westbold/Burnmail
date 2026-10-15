@@ -272,25 +272,51 @@ Response:
 ## Reconciliation
 
 ```http
-GET /reconciliation/{emailAddress}?since=1753317900&limit=20&cursor=1753317948:usm2sw0qfv9a5ku9z4xmh8og
+GET /reconciliation/{emailAddress}?since=1753317900&limit=20&offset=0
 Authorization: Bearer <claim-key>
 ```
 
-Returns the same complete fields as [webhook delivery](#webhook-delivery) for
-one claimed address, authorized by that address's existing key.
-`since` is a required inclusive Unix timestamp (seconds). `limit` defaults to
-20 (maximum 25); `cursor` is the previous response's `next_cursor`.
+Returns complete emails for one claimed address using its existing claim key.
+`since` is a required inclusive Unix timestamp in seconds; `limit` defaults to 20
+(maximum 25), and `offset` defaults to 0. Results are ordered by `(received_at, id)`
+ascending. The response follows the Phoneblur paginated-list shape inside Burnmail's
+normal `success`/`result` envelope:
 
-The response is `{ "success": true, "result": { "messages": [...], "next_cursor": null } }`.
-Messages are ordered by `(received_at, id)` ascending; a non-null
-`next_cursor` indicates another page. Keep `since` fixed while paging.
-Responses are non-cacheable. Errors: `400` invalid query, `401` missing key,
-`403` wrong key, `404` unknown claim/domain, `500` database error.
+```json
+{
+  "success": true,
+  "result": {
+    "data": [{
+      "id": "usm2sw0qfv9a5ku9z4xmh8og",
+      "from_address": "sender@example.com",
+      "to_address": "recipient@example.test",
+      "subject": "Welcome",
+      "received_at": 1753317948,
+      "html_content": "<p>Hello</p>",
+      "text_content": "Hello"
+    }],
+    "hasNext": true,
+    "links": {
+      "next": {
+        "method": "GET",
+        "href": "https://api.example.test/reconciliation/recipient@example.test?since=1753317900&limit=20&offset=20"
+      }
+    }
+  }
+}
+```
 
-For recovery, deduplicate against webhook deliveries by message `id` and
-repeat scans with an overlapping `since` window. Do not persist a page
-cursor as a sync watermark: late arrivals with the same timestamp can
-sort before it. Only messages still retained by Burnmail are recoverable.
+`data` contains full stored emails (the same fields and IDs as webhook delivery).
+Follow the **absolute** `links.next.href` with the same bearer header while
+`hasNext` is true. On the final page `hasNext` is false and `links` is empty.
+Links use the request origin and never contain authorization credentials.
+Responses are non-cacheable. Errors: `400` invalid parameters, `401` missing key,
+`403` wrong key, `404` unknown claim/domain, `500` database failure.
+
+Deduplicate against webhook messages by `id`. Offset pagination is not a snapshot:
+messages received or deleted mid-scan can shift page boundaries. Reconcile
+repeatedly using an overlapping `since` window. Already-expired or deleted
+messages cannot be recovered.
 
 ## Domains
 
