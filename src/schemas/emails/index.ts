@@ -318,6 +318,37 @@ export const emailsCountSuccessResponseSchema = z
 	})
 	.openapi("EmailsCountSuccessResponse");
 
+export const reconciliationQuerySchema = z.object({
+	since: z.coerce.number().int().min(0).openapi({
+		example: 1753317900,
+		description: "Inclusive Unix timestamp at which to start recovering messages.",
+	}),
+	limit: z.coerce.number().int().min(1).max(25).optional().default(20).openapi({
+		example: 20,
+		description: "Number of complete messages per page (1-25).",
+	}),
+	cursor: z
+		.string()
+		.regex(/^[0-9]+:[a-z0-9]+$/)
+		.max(96)
+		.optional()
+		.openapi({
+			example: "1753317948:usm2sw0qfv9a5ku9z4xmh8og",
+			description:
+				"Opaque continuation cursor from the previous response, for the same since value.",
+		}),
+});
+
+export const reconciliationSuccessResponseSchema = z
+	.object({
+		success: z.literal(true),
+		result: z.object({
+			messages: z.array(emailSchema),
+			next_cursor: z.string().nullable(),
+		}),
+	})
+	.openapi("ReconciliationSuccessResponse");
+
 // Type exports
 export type Email = z.infer<typeof emailSchema>;
 export type EmailSummary = z.infer<typeof emailSummarySchema>;

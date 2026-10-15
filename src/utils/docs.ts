@@ -39,6 +39,10 @@ placeholder addresses; they are not production configuration.
 			{ name: "Claims", description: "Claim and release recipient addresses" },
 			{ name: "Emails", description: "List, count, and delete a recipient's messages" },
 			{ name: "Inbox", description: "Read and delete individual messages" },
+			{
+				name: "Reconciliation",
+				description: "Recover missed messages using per-mailbox claim keys",
+			},
 			{ name: "Domains", description: "Read the runtime receiving-domain allowlist" },
 		],
 	});

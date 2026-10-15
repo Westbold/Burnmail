@@ -14,6 +14,8 @@ import {
 	emailsDeleteSuccessResponseSchema,
 	errorResponseSchema,
 	notFoundErrorResponseSchema,
+	reconciliationQuerySchema,
+	reconciliationSuccessResponseSchema,
 	validationErrorResponseSchema,
 } from "./index";
 
@@ -310,6 +312,31 @@ export const deleteEmailRoute = createRoute({
 	summary: "Delete email inbox",
 	description:
 		"Delete a specific inbox by its email ID using the matching Authorization bearer token for the recipient claim",
+});
+
+export const reconcileEmailsRoute = createRoute({
+	method: "get",
+	path: "/reconciliation/{emailAddress}",
+	security: bearerSecurity,
+	request: {
+		params: emailAddressParamSchema,
+		query: reconciliationQuerySchema,
+	},
+	responses: {
+		200: {
+			content: { "application/json": { schema: reconciliationSuccessResponseSchema } },
+			description: "Full stored emails in chronological, cursor-paginated order",
+		},
+		400: { content: errorJson, description: "Invalid query or continuation cursor" },
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
+		404: { content: errorJson, description: "Unsupported domain or address not claimed" },
+		500: { content: errorJson, description: "Database reconciliation failure" },
+	},
+	tags: ["Reconciliation"],
+	summary: "Reconcile missed inbound emails",
+	description:
+		"Retrieve stored full messages for one claimed mailbox using its own claim key. Records expire according to retention; repeat with a small overlapping since window and deduplicate by message ID.",
 });
 
 // Get domains route

@@ -18,6 +18,7 @@ import {
 	getEmailRoute,
 	getEmailsCountRoute,
 	getEmailsRoute,
+	reconcileEmailsRoute,
 	releaseAddressClaimRoute,
 } from "@/schemas/emails/routeDefinitions";
 
@@ -262,6 +263,52 @@ emailRoutes.openapi(deleteEmailRoute, async (c) => {
 	if (error) return c.json(ERR(error.message, "D1Error"), 500);
 	if (meta && meta.changes === 0) return c.json(ERR("Email not found", "NotFound"), 404);
 	return c.json(OK({ message: "Email deleted successfully" }));
+});
+
+// @ts-ignore - OpenAPI route handler type mismatch with error response status codes
+emailRoutes.openapi(reconcileEmailsRoute, async (c) => {
+	c.header("Cache-Control", "no-store");
+	const { emailAddress } = c.req.valid("param");
+	const { since, limit, cursor } = c.req.valid("query");
+
+	const domainValidation = validateEmailDomain(emailAddress, c.env);
+	if (!domainValidation.valid) return c.json(domainValidation.error, 404);
+
+	const authorization = await getAuthorizationHash(c);
+	if ("error" in authorization) return c.json(authorization.error, authorization.status);
+
+	const dbService = createDatabaseService(c.env.D1);
+	const claimAuthorization = await authorizeClaim(
+		dbService,
+		emailAddress,
+		authorization.authKeyHash,
+	);
+	if ("error" in claimAuthorization)
+		return c.json(claimAuthorization.error, claimAuthorization.status);
+
+	const [cursorTime, cursorId] = cursor?.split(":") ?? [String(since), ""];
+	const afterTimestamp = Number(cursorTime);
+	if (!Number.isSafeInteger(afterTimestamp) || afterTimestamp < since) {
+		return c.json(ERR("Invalid reconciliation cursor", "ValidationError"), 400);
+	}
+
+	const { results, error } = await dbService.getEmailsForReconciliation(
+		emailAddress,
+		since,
+		afterTimestamp,
+		cursorId,
+		limit + 1,
+	);
+	if (error) return c.json(ERR(error.message, "D1Error"), 500);
+
+	const messages = results.slice(0, limit);
+	const last = messages.at(-1);
+	return c.json(
+		OK({
+			messages,
+			next_cursor: results.length > limit && last ? `${String(last.received_at)}:${last.id}` : null,
+		}),
+	);
 });
 
 emailRoutes.openapi(getDomainsRoute, async (c) => {

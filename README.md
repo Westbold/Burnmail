@@ -97,6 +97,7 @@ OpenAPI document at `/openapi.json`. The API explorer uses the current origin.
 | `DELETE` | `/claims/{emailAddress}` | Release the claim and delete its messages |
 | `GET` | `/emails/{emailAddress}` | List summaries, newest first; `limit` and `offset` supported |
 | `GET` | `/emails/count/{emailAddress}` | Count messages |
+| `GET` | `/reconciliation/{emailAddress}` | Recover complete emails with a paginated cursor |
 | `DELETE` | `/emails/{emailAddress}` | Delete messages without releasing the claim |
 | `GET` | `/inbox/{emailId}` | Retrieve a complete stored message |
 | `DELETE` | `/inbox/{emailId}` | Delete one message |
@@ -106,6 +107,29 @@ OpenAPI document at `/openapi.json`. The API explorer uses the current origin.
 Except for the two public endpoints and documentation, requests require
 `Authorization: Bearer <claim-key>`. See [the API specification](documentation/03_apispec.md)
 for response shapes and error behavior.
+
+## Recovering missed webhook deliveries
+
+Use `GET /reconciliation/{emailAddress}` to recover missed messages.
+Authenticate with **the claim key for that exact mailbox**, not a global
+secret. The endpoint returns full messages with the same fields as the webhook.
+
+```bash
+curl --fail-with-body "$API_BASE_URL/reconciliation/$EMAIL_ADDRESS?since=1753317900&limit=20" \
+  -H "Authorization: Bearer $CLAIM_KEY"
+```
+
+Continue with `next_cursor` and the **same** `since` until the cursor is
+`null`. Emails are sorted by `(received_at, id)`, oldest first.
+Deduplicate by the stable Burnmail `id`, including webhook deliveries.
+
+**Do not persist the cursor as a sync checkpoint:** new messages can arrive
+during pagination, including within the same timestamp second. Begin each
+periodic reconciliation pass with an overlapping `since` timestamp
+(e.g. 2 minutes before the previous successful pass), and exhaust the pages.
+Reconciliation cannot restore messages already deleted or expired;
+retention is currently three hours, followed by periodic cleanup.
+See [the API specification](documentation/03_apispec.md#reconciliation).
 
 ## Configuration stays outside Git
 

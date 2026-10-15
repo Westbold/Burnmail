@@ -95,6 +95,27 @@ export class DatabaseService {
 		}
 	}
 
+	async getEmailsForReconciliation(
+		emailAddress: string,
+		since: number,
+		afterTimestamp: number,
+		afterId: string,
+		limit: number,
+	) {
+		try {
+			const { results, error } = await this.db
+				.prepare(
+					"SELECT id, from_address, to_address, subject, received_at, html_content, text_content FROM emails WHERE to_address = ? AND received_at >= ? AND (received_at > ? OR (received_at = ? AND id > ?)) ORDER BY received_at ASC, id ASC LIMIT ?",
+				)
+				.bind(emailAddress, since, afterTimestamp, afterTimestamp, afterId, limit)
+				.all();
+			return { results: results as Email[], error };
+		} catch (e: unknown) {
+			const error = e instanceof Error ? e : new Error(String(e));
+			return { results: [] as Email[], error };
+		}
+	}
+
 	async getEmailById(emailId: string) {
 		try {
 			const { results, error } = await this.db
