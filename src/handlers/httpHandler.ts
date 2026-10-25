@@ -1,4 +1,5 @@
 import app from "@/app";
+import { handleMcp } from "@/mcp";
 
 const documentPaths = new Set(["/", "/app", "/app/", "/app/index.html"]);
 
@@ -82,6 +83,7 @@ export async function handleHttp(
 	ctx: ExecutionContext,
 ): Promise<Response> {
 	const url = new URL(request.url);
+	if (url.pathname === "/mcp") return handleMcp(request, env, ctx);
 	const navigation = request.method === "GET" || request.method === "HEAD";
 	const redirected = hostRedirect(url, env);
 	if (redirected) {

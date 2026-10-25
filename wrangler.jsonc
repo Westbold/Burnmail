@@ -33,5 +33,23 @@
 	},
 	"placement": {
 		"mode": "smart"
-	}
+	},
+	"ratelimits": [
+		{
+			"name": "MCP_REQUEST_LIMIT",
+			"namespace_id": "1258749535",
+			"simple": {
+				"limit": 120,
+				"period": 60
+			}
+		},
+		{
+			"name": "MCP_CREATE_LIMIT",
+			"namespace_id": "1258749536",
+			"simple": {
+				"limit": 10,
+				"period": 60
+			}
+		}
+	]
 }
