@@ -108,6 +108,13 @@ Except for the two public endpoints and documentation, requests require
 `Authorization: Bearer <claim-key>`. See [the API specification](documentation/03_apispec.md)
 for response shapes and error behavior.
 
+## MCP
+
+A stateless, unauthenticated Streamable HTTP endpoint is available at `${API_BASE_URL}/mcp`.
+Its nine tools create, read and delete inboxes using the existing per-mailbox claim keys;
+no OAuth, sessions, credential registry or new database is introduced. See
+[the MCP guide](documentation/07_mcp.md) for setup, tool arguments and abuse limits.
+
 ## Configuration stays outside Git
 
 | Setting | Location | Purpose |
