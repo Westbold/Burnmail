@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { resolveMx } from "node:dns/promises";
 import { checkWebmail } from "./webmail-smoke";
+import { checkMcp } from "./mcp-smoke";
 
 type Payload = Record<string, unknown>;
 type Request = (path: string, method?: string, token?: string) => Promise<[number, Payload]>;
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
 	check((await request(inbox, "GET", key))[0] === 404, "released inbox denial");
 	console.log("PASS temporary claim removed; no test recipient or key logged");
 	await checkWebmail();
+	await checkMcp(base);
 }
 
 main().catch(() => {

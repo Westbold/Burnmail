@@ -18,7 +18,8 @@
     "check:fix": "biome check --write --unsafe ./src",
     "tsc": "tsc --noEmit",
     "knip": "knip",
-    "smoke": "bun run scripts/smoke.ts"
+    "smoke": "bun run scripts/smoke.ts",
+    "smoke:mcp": "bun run scripts/mcp-smoke.ts"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.2",

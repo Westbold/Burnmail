@@ -82,7 +82,7 @@ export class DatabaseService {
 					`SELECT id, from_address, to_address, subject, received_at
          FROM emails
          WHERE to_address = ?
-         ORDER BY received_at DESC
+         ORDER BY received_at DESC, id DESC
          LIMIT ? OFFSET ?`,
 				)
 				.bind(emailAddress, limit, offset)
