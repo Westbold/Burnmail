@@ -25,8 +25,9 @@ h2 { font-size: 17px; line-height: 1.4; font-weight: 650; overflow-wrap: anywher
 .muted, .optional { color: #6a7483; font-size: 13px; }
 .optional { font-weight: 400; margin-left: 4px; }
 .topbar { height: 76px; max-width: 1256px; margin: 0 auto; padding: 0 28px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
-.brand { display: inline-flex; align-items: center; flex-shrink: 0; min-height: 44px; }
-.brand-logo { display: block; width: 80px; height: 44px; object-fit: contain; }
+.brand { display: inline-flex; align-items: center; flex-shrink: 0; gap: 10px; min-height: 44px; padding: 8px; }
+.brand-logo { display: block; flex-shrink: 0; width: 44px; height: 24px; object-fit: contain; }
+.brand-wordmark { font-size: 20px; font-weight: 800; letter-spacing: -.04em; line-height: 1; white-space: nowrap; }
 .brand:hover { text-decoration: none; }
 .header-links { display: flex; align-items: center; gap: 18px; color: #626c7d; font-size: 13px; }
 .header-links .text-button { font-weight: 400; font-size: 13px; }
@@ -136,6 +137,11 @@ dialog .toolbar { margin-bottom: 20px; }
   .home-actions { gap: 8px; }
   .home-actions button { padding-left: 12px; padding-right: 12px; }
   .address-input input { font-size: 16px; }
+}
+@media (max-width: 360px) {
+  .topbar { padding: 0 12px; gap: 8px; }
+  .brand { gap: 8px; padding: 8px 4px; }
+  .brand-wordmark { font-size: 18px; }
 }
 @media (prefers-reduced-motion: no-preference) { button, a { transition: background-color .12s, color .12s; } }
 
