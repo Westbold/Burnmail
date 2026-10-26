@@ -5,16 +5,27 @@ import { test } from "node:test";
 const asset = (name) => readFile(new URL(`../public/app/${name}`, import.meta.url), "utf8");
 const paths = (svg) => [...svg.matchAll(/<path\s+d="([^"]+)"\s*\/>/g)].map((match) => match[1]);
 
-test("the shared app header uses the approved icon without a wordmark", async () => {
+test("the shared app header pairs the approved compact icon with the Burnmail wordmark", async () => {
   const html = await asset("index.html");
   const brand = html.match(/<a\b[^>]*id="home-link"[^>]*>([\s\S]*?)<\/a>/);
   assert.ok(brand);
   assert.match(brand[0], /href="\/"/);
   assert.match(brand[0], /aria-label="Burnmail home"/);
   assert.match(brand[1], /<img\b[^>]*src="\/app\/burnmail\.svg"/);
-  assert.match(brand[1], /width="80" height="44"/);
-  assert.match(brand[1], /alt=""/);
-  assert.equal(brand[1].replace(/<[^>]+>/g, "").trim(), "");
+  assert.match(brand[1], /width="44" height="24"/);
+  assert.match(brand[1], /alt="" aria-hidden="true"/);
+  assert.match(brand[1], /<span class="brand-wordmark">Burnmail<\/span>/);
+  assert.equal(brand[1].replace(/<[^>]+>/g, "").trim(), "Burnmail");
+});
+
+test("the compact brand has padding and keeps the wordmark beside the icon", async () => {
+  const css = await asset("styles.css");
+  assert.match(css, /\.brand\s*\{[^}]*gap:\s*10px/);
+  assert.match(css, /\.brand\s*\{[^}]*padding:\s*8px/);
+  assert.match(css, /\.brand-logo\s*\{[^}]*width:\s*44px;\s*height:\s*24px/);
+  assert.match(css, /\.brand-logo\s*\{[^}]*flex-shrink:\s*0/);
+  assert.match(css, /\.brand-wordmark\s*\{[^}]*white-space:\s*nowrap/);
+  assert.match(css, /@media\s*\(max-width:\s*360px\)/);
 });
 
 test("logo and favicon are transparent vectors with identical approved geometry", async () => {
