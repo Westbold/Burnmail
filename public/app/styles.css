@@ -25,7 +25,8 @@ h2 { font-size: 17px; line-height: 1.4; font-weight: 650; overflow-wrap: anywher
 .muted, .optional { color: #6a7483; font-size: 13px; }
 .optional { font-weight: 400; margin-left: 4px; }
 .topbar { height: 76px; max-width: 1256px; margin: 0 auto; padding: 0 28px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
-.brand { font-size: 16px; font-weight: 800; letter-spacing: .1em; }
+.brand { display: inline-flex; align-items: center; flex-shrink: 0; min-height: 44px; }
+.brand-logo { display: block; width: 80px; height: 44px; object-fit: contain; }
 .brand:hover { text-decoration: none; }
 .header-links { display: flex; align-items: center; gap: 18px; color: #626c7d; font-size: 13px; }
 .header-links .text-button { font-weight: 400; font-size: 13px; }
