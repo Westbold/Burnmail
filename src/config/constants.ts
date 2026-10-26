@@ -12,3 +12,9 @@ export const HTML_PROCESSING = {
 export const CACHE = {
 	DOMAINS_TTL: 3600, // 1 hour
 } as const;
+
+// Fixed storage bounds, enforced before MIME parsing and before D1 insertion.
+export const EMAIL_LIMITS = {
+	MAX_RAW_BYTES: 256 * 1024,
+	MAX_CONTENT_BYTES: 64 * 1024,
+} as const;

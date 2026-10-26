@@ -791,32 +791,40 @@ describe("MCP deep-test regressions", () => {
 		expect(message).not.toHaveProperty("attachments");
 	});
 
-	test("large MIME bodies survive ingestion and full MCP reads without truncation", async () => {
+	test("oversized MIME bodies are rejected without entering inbox or recovery storage", async () => {
 		const { env } = fixture();
 		const inbox = await create(env);
-		const body = `BEGIN_LARGE\n${"0123456789abcdef\n".repeat(16384)}END_LARGE`;
-		const raw = `From: sender@example.com\r\nTo: ${inbox.email_address}\r\nSubject: Large fixture\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${Buffer.from(body).toString("base64")}`;
+		const body = "0123456789abcdef\n".repeat(16384);
+		let rejected = false;
 		await handleEmail(
 			{
 				from: "sender@example.com",
 				to: inbox.email_address,
-				raw: new Blob([raw]).stream(),
+				raw: new Blob([body]).stream(),
+				setReject() {
+					rejected = true;
+				},
 			} as unknown as ForwardableEmailMessage,
 			env,
 			ctx,
 		);
-		const list = value<Email[]>(await call(env, "list_messages", inbox));
-		expect(list).toHaveLength(1);
-		const full = value<Email>(
-			await call(env, "read_message", { ...inbox, message_id: list[0].id }),
-		);
-		expect(full.text_content).toBe(body);
-		const page = value<{ data: Email[] }>(
-			await call(env, "reconcile_inbox", { ...inbox, since: 0 }),
-		);
-		expect(page.data[0].text_content).toBe(body);
+		expect(rejected).toBe(true);
+		expect(value<Email[]>(await call(env, "list_messages", inbox))).toHaveLength(0);
+		expect(
+			value<{ data: Email[] }>(await call(env, "reconcile_inbox", { ...inbox, since: 0 })).data,
+		).toHaveLength(0);
 	});
 
+	test("retention also removes legacy oversized rows without releasing claims", async () => {
+		const { deleteOldEmails } = await import("@/database/d1");
+		const { env, sql } = fixture();
+		const inbox = await create(env);
+		const id = seed(sql, inbox, "abcdefghijklmnopqrstuvwx", 2000);
+		sql.query("UPDATE emails SET text_content = ? WHERE id = ?").run("x".repeat(64 * 1024 + 1), id);
+		expect((await deleteOldEmails(env.D1, 0)).success).toBe(true);
+		expect(value<{ count: number }>(await call(env, "count_messages", inbox)).count).toBe(0);
+		expect(sql.query("SELECT * FROM claims").all()).toHaveLength(1);
+	});
 	test("retention removes expired mail but preserves the inclusive cutoff and claimed address", async () => {
 		const { deleteOldEmails } = await import("@/database/d1");
 		const { env, sql } = fixture();

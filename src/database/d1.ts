@@ -1,3 +1,4 @@
+import { EMAIL_LIMITS } from "@/config/constants";
 import type { Email, EmailSummary } from "@/schemas/emails";
 
 interface Claim {
@@ -110,8 +111,11 @@ export async function getEmailById(db: D1Database, emailId: string) {
 export async function deleteOldEmails(db: D1Database, timestamp: number) {
 	try {
 		const { success, error, meta } = await db
-			.prepare("DELETE FROM emails WHERE received_at < ?")
-			.bind(timestamp)
+			.prepare(`DELETE FROM emails WHERE received_at < ? OR
+ length(CAST(COALESCE(from_address, '') AS BLOB)) + length(CAST(COALESCE(to_address, '') AS BLOB)) +
+ length(CAST(COALESCE(subject, '') AS BLOB)) + length(CAST(COALESCE(html_content, '') AS BLOB)) +
+ length(CAST(COALESCE(text_content, '') AS BLOB)) > ?`)
+			.bind(timestamp, EMAIL_LIMITS.MAX_CONTENT_BYTES)
 			.run();
 		return { success, error, meta };
 	} catch (e: unknown) {
