@@ -208,9 +208,8 @@ emailRoutes.openapi(deleteEmailsRoute, async (c) => {
 	const { meta, error } = await dbService.deleteEmailsByRecipient(emailAddress);
 
 	if (error) return c.json(ERR(error.message, "D1Error"), 500);
-	if (meta && meta.changes === 0)
-		return c.json(ERR("No emails found for deletion", "NotFound"), 404);
-	return c.json(OK({ message: "Emails deleted successfully", deleted_count: meta?.changes }));
+	// Clearing an authorized, empty mailbox is a successful no-op.
+	return c.json(OK({ message: "Emails deleted successfully", deleted_count: meta?.changes ?? 0 }));
 });
 
 // @ts-ignore - OpenAPI route handler type mismatch with error response status codes

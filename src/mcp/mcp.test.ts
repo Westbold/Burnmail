@@ -404,7 +404,10 @@ describe("MCP mailbox behavior through real REST handlers and SQLite", () => {
 			email_address: "recipient@example.test",
 			claim_key: "secret",
 		});
-		expect(result.structuredContent.status).toBe(500);
+		expect(result.structuredContent).toMatchObject({
+			status: 500,
+			error: { code: "INTERNAL_ERROR", retryable: true },
+		});
 		expect(JSON.stringify(result)).not.toContain("private internal detail");
 		expect(JSON.stringify(result)).not.toContain("secret");
 	});
@@ -524,5 +527,315 @@ describe("MCP HTTP boundary", () => {
 			["count_messages", { ...inbox, claim_key: "key\r\nX-Evil: true" }],
 		] as const)
 			expect((await call(env, name, args)).isError).toBe(true);
+	});
+});
+
+describe("MCP deep-test regressions", () => {
+	test("empty, repeated, and concurrent clears succeed without releasing the claim", async () => {
+		const { env, sql } = fixture();
+		const inbox = await create(env);
+		for (let i = 0; i < 2; i++) {
+			expect(
+				value<{ deleted_count: number }>(await call(env, "clear_inbox", inbox)).deleted_count,
+			).toBe(0);
+		}
+		seed(sql, inbox);
+		seed(sql, inbox, "bcdefghijklmnopqrstuvwxy");
+		const results = await Promise.all([
+			call(env, "clear_inbox", inbox),
+			call(env, "clear_inbox", inbox),
+		]);
+		expect(results.map((r) => value<{ deleted_count: number }>(r).deleted_count).sort()).toEqual([
+			0, 2,
+		]);
+		expect(value<{ count: number }>(await call(env, "count_messages", inbox)).count).toBe(0);
+		expect(sql.query("SELECT * FROM claims").all()).toHaveLength(1);
+		expect(
+			(await call(env, "clear_inbox", { ...inbox, claim_key: "wrong" })).structuredContent.status,
+		).toBe(403);
+		expect(
+			(await call(env, "clear_inbox", { ...inbox, email_address: "missing@example.test" }))
+				.structuredContent.status,
+		).toBe(404);
+	});
+
+	test("REST empty clearing has the same idempotent behavior and retains authorization", async () => {
+		const { env } = fixture();
+		const inbox = await create(env);
+		const path = `/emails/${encodeURIComponent(inbox.email_address)}`;
+		for (let i = 0; i < 2; i++) {
+			const response = await app.request(
+				path,
+				{ method: "DELETE", headers: { Authorization: `Bearer ${inbox.claim_key}` } },
+				env,
+			);
+			expect(response.status).toBe(200);
+			expect((await response.json()) as Record<string, unknown>).toEqual({
+				success: true,
+				result: { message: "Emails deleted successfully", deleted_count: 0 },
+			});
+		}
+		expect((await app.request(path, { method: "DELETE" }, env)).status).toBe(401);
+		expect(
+			(
+				await app.request(
+					path,
+					{ method: "DELETE", headers: { Authorization: "Bearer wrong" } },
+					env,
+				)
+			).status,
+		).toBe(403);
+	});
+
+	test("business failures preserve distinct structured codes instead of JSON-RPC errors", async () => {
+		const { env } = fixture();
+		const inbox = await create(env);
+		const denied = await call(env, "count_messages", { ...inbox, claim_key: "wrong" });
+		const missing = await call(env, "read_message", {
+			...inbox,
+			message_id: "abcdefghijklmnopqrstuvwx",
+		});
+		const unsupported = await call(env, "create_inbox", { domain: "unsupported.test" });
+		env.MCP_CREATE_LIMIT = { limit: async () => ({ success: false }) };
+		const limited = await call(env, "create_inbox");
+		delete env.MCP_CREATE_LIMIT;
+		const unavailable = await call(env, "create_inbox");
+		for (const [reply, status, code, retryable] of [
+			[denied, 403, "FORBIDDEN", false],
+			[missing, 404, "NOT_FOUND", false],
+			[unsupported, 404, "NOT_FOUND", false],
+			[limited, 429, "RATE_LIMITED", true],
+			[unavailable, 503, "SERVICE_UNAVAILABLE", true],
+		] as const) {
+			expect(reply.isError).toBe(true);
+			expect(reply.structuredContent).toMatchObject({
+				success: false,
+				status,
+				error: { code, retryable },
+			});
+			expect(JSON.parse(reply.content[0].text)).toEqual(reply.structuredContent);
+			expect(JSON.stringify(reply)).not.toContain(inbox.claim_key);
+		}
+		const unknown = await rpc(env, "tools/call", { name: "no_such_tool", arguments: {} });
+		expect(unknown.payload.error?.code).toBe(-32602);
+	});
+
+	test("discovery declares the error schema and preserves truthful destructive annotations", async () => {
+		const { env } = fixture();
+		const { payload } = await rpc(env, "tools/list");
+		const { tools } = payload.result as {
+			tools: {
+				name: string;
+				outputSchema: { properties: Record<string, unknown> };
+				annotations: { readOnlyHint: boolean; destructiveHint: boolean };
+			}[];
+		};
+		for (const tool of tools) {
+			expect(tool.outputSchema.properties.error).toBeDefined();
+			expect(tool.outputSchema.properties.status).toBeDefined();
+			if (["delete_message", "clear_inbox", "release_inbox"].includes(tool.name)) {
+				expect(tool.annotations.destructiveHint).toBe(true);
+				expect(tool.annotations.readOnlyHint).toBe(false);
+			}
+		}
+	});
+
+	test("stable timestamp ties paginate in opposite list/reconciliation orders without omissions", async () => {
+		const { env, sql } = fixture();
+		const inbox = await create(env);
+		const ids = [
+			"abcdefghijklmnopqrstuvwx",
+			"bcdefghijklmnopqrstuvwxy",
+			"cdefghijklmnopqrstuvwxyz",
+			"defghijklmnopqrstuvwxyza",
+		];
+		// Insertion order deliberately disagrees with both sort orders.
+		for (const i of [2, 0, 3, 1]) seed(sql, inbox, ids[i], i === 3 ? 1001 : 1000);
+		const listed: string[] = [];
+		const reconciled: string[] = [];
+		for (const offset of [0, 2]) {
+			listed.push(
+				...value<Email[]>(await call(env, "list_messages", { ...inbox, limit: 2, offset })).map(
+					(m) => m.id,
+				),
+			);
+			const page = value<{ data: Email[]; hasNext: boolean; links: { next?: { href: string } } }>(
+				await call(env, "reconcile_inbox", { ...inbox, since: 1000, limit: 2, offset }),
+			);
+			reconciled.push(...page.data.map((m) => m.id));
+			expect(page.hasNext).toBe(offset === 0);
+			if (offset === 0) {
+				const link = new URL(page.links.next?.href ?? "");
+				expect(link.searchParams.get("since")).toBe("1000");
+				expect(link.searchParams.get("offset")).toBe("2");
+				expect(link.href).not.toContain(inbox.claim_key);
+			} else expect(page.links).toEqual({});
+		}
+		expect(listed).toEqual([...ids].reverse());
+		expect(reconciled).toEqual(ids);
+		expect(value<Email[]>(await call(env, "list_messages", { ...inbox, offset: 4 }))).toEqual([]);
+		expect(
+			value<{ data: Email[]; hasNext: boolean }>(
+				await call(env, "reconcile_inbox", { ...inbox, since: 1002 }),
+			),
+		).toMatchObject({ data: [], hasNext: false });
+		expect(value<{ count: number }>(await call(env, "count_messages", inbox)).count).toBe(4);
+	});
+
+	test("successful deletion affects only its message; retries and reads report NOT_FOUND", async () => {
+		const { env, sql } = fixture();
+		const a = await create(env);
+		const b = await create(env);
+		const message_id = seed(sql, a);
+		seed(sql, a, "bcdefghijklmnopqrstuvwxy");
+		seed(sql, b, "cdefghijklmnopqrstuvwxyz");
+		value(await call(env, "delete_message", { ...a, message_id }));
+		for (const name of ["read_message", "delete_message"]) {
+			expect((await call(env, name, { ...a, message_id })).structuredContent).toMatchObject({
+				success: false,
+				status: 404,
+				error: { code: "NOT_FOUND" },
+			});
+		}
+		for (const inbox of [a, b])
+			expect(value<{ count: number }>(await call(env, "count_messages", inbox)).count).toBe(1);
+	});
+
+	test("release retries cannot delete an address reclaimed under a different key", async () => {
+		const { env, sql } = fixture();
+		const inbox = await create(env);
+		seed(sql, inbox);
+		expect(
+			value<{ deleted_count: number }>(await call(env, "release_inbox", inbox)).deleted_count,
+		).toBe(1);
+		expect((await call(env, "release_inbox", inbox)).structuredContent.status).toBe(404);
+		const next = { ...inbox, claim_key: "new-owner-secret" };
+		await claim(env, next);
+		seed(sql, next);
+		for (const name of ["release_inbox", "clear_inbox", "count_messages"]) {
+			expect((await call(env, name, inbox)).structuredContent.status).toBe(403);
+		}
+		expect(value<{ count: number }>(await call(env, "count_messages", next)).count).toBe(1);
+	});
+
+	test("concurrent message deletes remain isolated across independently claimed inboxes", async () => {
+		const { env, sql } = fixture();
+		const a = await create(env);
+		const b = await create(env);
+		const first = seed(sql, a);
+		const second = seed(sql, a, "bcdefghijklmnopqrstuvwxy");
+		const third = seed(sql, b, "cdefghijklmnopqrstuvwxyz");
+		const replies = await Promise.all([
+			call(env, "delete_message", { ...a, message_id: first }),
+			call(env, "delete_message", { ...a, message_id: second }),
+			call(env, "read_message", { ...b, message_id: third }),
+		]);
+		for (const reply of replies) value(reply);
+		expect(value<{ count: number }>(await call(env, "count_messages", a)).count).toBe(0);
+		expect(value<{ count: number }>(await call(env, "count_messages", b)).count).toBe(1);
+	});
+
+	test("multipart Unicode MIME preserves text/HTML while attachments remain unsupported", async () => {
+		const { env } = fixture();
+		const inbox = await create(env);
+		const body = "Grüße 世界 — code 987654";
+		const html = `<p>${body}</p>`;
+		const raw = [
+			"From: sender@example.com",
+			`To: ${inbox.email_address}`,
+			`Subject: =?UTF-8?B?${Buffer.from("Unicode ✓ 世界").toString("base64")}?=`,
+			"MIME-Version: 1.0",
+			'Content-Type: multipart/mixed; boundary="outer"',
+			"",
+			"--outer",
+			'Content-Type: multipart/alternative; boundary="inner"',
+			"",
+			"--inner",
+			"Content-Type: text/plain; charset=utf-8",
+			"Content-Transfer-Encoding: base64",
+			"",
+			Buffer.from(body).toString("base64"),
+			"--inner",
+			"Content-Type: text/html; charset=utf-8",
+			"Content-Transfer-Encoding: base64",
+			"",
+			Buffer.from(html).toString("base64"),
+			"--inner--",
+			"--outer",
+			'Content-Type: application/octet-stream; name="fixture.bin"',
+			'Content-Disposition: attachment; filename="fixture.bin"',
+			"Content-Transfer-Encoding: base64",
+			"",
+			Buffer.from("ATTACHMENT_ONLY_MARKER").toString("base64"),
+			"--outer--",
+			"",
+		].join("\r\n");
+		await handleEmail(
+			{
+				from: "sender@example.com",
+				to: inbox.email_address,
+				raw: new Blob([raw]).stream(),
+			} as unknown as ForwardableEmailMessage,
+			env,
+			ctx,
+		);
+		const list = value<Email[]>(await call(env, "list_messages", inbox));
+		expect(list).toHaveLength(1);
+		const message = value<Email>(
+			await call(env, "read_message", { ...inbox, message_id: list[0].id }),
+		);
+		expect(message.subject).toBe("Unicode ✓ 世界");
+		expect(message.text_content).toContain(body);
+		expect(message.html_content).toContain(html);
+		expect(JSON.stringify(message)).not.toContain("ATTACHMENT_ONLY_MARKER");
+		expect(message).not.toHaveProperty("attachments");
+	});
+
+	test("large MIME bodies survive ingestion and full MCP reads without truncation", async () => {
+		const { env } = fixture();
+		const inbox = await create(env);
+		const body = `BEGIN_LARGE\n${"0123456789abcdef\n".repeat(16384)}END_LARGE`;
+		const raw = `From: sender@example.com\r\nTo: ${inbox.email_address}\r\nSubject: Large fixture\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${Buffer.from(body).toString("base64")}`;
+		await handleEmail(
+			{
+				from: "sender@example.com",
+				to: inbox.email_address,
+				raw: new Blob([raw]).stream(),
+			} as unknown as ForwardableEmailMessage,
+			env,
+			ctx,
+		);
+		const list = value<Email[]>(await call(env, "list_messages", inbox));
+		expect(list).toHaveLength(1);
+		const full = value<Email>(
+			await call(env, "read_message", { ...inbox, message_id: list[0].id }),
+		);
+		expect(full.text_content).toBe(body);
+		const page = value<{ data: Email[] }>(
+			await call(env, "reconcile_inbox", { ...inbox, since: 0 }),
+		);
+		expect(page.data[0].text_content).toBe(body);
+	});
+
+	test("retention removes expired mail but preserves the inclusive cutoff and claimed address", async () => {
+		const { deleteOldEmails } = await import("@/database/d1");
+		const { env, sql } = fixture();
+		const inbox = await create(env);
+		const expired = seed(sql, inbox, "abcdefghijklmnopqrstuvwx", 1000);
+		const retained = seed(sql, inbox, "bcdefghijklmnopqrstuvwxy", 1001);
+		expect((await deleteOldEmails(env.D1, 1001)).success).toBe(true);
+		expect(
+			(await call(env, "read_message", { ...inbox, message_id: expired })).structuredContent.status,
+		).toBe(404);
+		const page = value<{ data: Email[] }>(
+			await call(env, "reconcile_inbox", { ...inbox, since: 0 }),
+		);
+		expect(page.data.map((m) => m.id)).toEqual([retained]);
+		expect((await deleteOldEmails(env.D1, 1002)).success).toBe(true);
+		expect(value<{ count: number }>(await call(env, "count_messages", inbox)).count).toBe(0);
+		expect(
+			value<{ deleted_count: number }>(await call(env, "clear_inbox", inbox)).deleted_count,
+		).toBe(0);
+		expect(sql.query("SELECT * FROM claims").all()).toHaveLength(1);
 	});
 });

@@ -207,13 +207,13 @@ export const deleteEmailsRoute = createRoute({
 					schema: emailsDeleteSuccessResponseSchema,
 				},
 			},
-			description: "Successfully deleted all emails for the address",
+			description: "Successfully cleared the address, including an already-empty inbox",
 		},
 		401: unauthorizedResponse,
 		403: forbiddenResponse,
 		404: {
 			content: errorJson,
-			description: "Domain not supported, claim not found, or no emails found",
+			description: "Domain not supported or claim not found",
 		},
 		400: {
 			content: {

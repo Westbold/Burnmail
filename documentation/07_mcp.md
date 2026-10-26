@@ -18,7 +18,7 @@ business data persists in D1; edge abuse counters are not MCP sessions.
 
 `app.fetch` dispatches in-process: there is no network proxy, configurable upstream URL,
 duplicate SQL, new storage, or parallel authorization implementation. REST routes, inbound
-email handling, scheduled retention, webmail and the D1 schema are unchanged. Removing the
+email handling, scheduled retention, webmail and the D1 schema are shared. Removing the
 single `/mcp` routing hook disconnects the adapter.
 
 Only `@modelcontextprotocol/server` is added as a runtime dependency. Zod is updated to the
@@ -63,9 +63,21 @@ digit. A random suffix is always appended. `since` is an inclusive Unix timestam
 advance `offset`. Overlap scans and deduplicate message IDs; pagination is not a snapshot.
 
 Tool results include both text JSON and matching `structuredContent`, preserving Burnmail's
-`success`/`result` envelope. Business failures set `isError: true` and include the underlying
-HTTP `status` where applicable. Existing semantics remain intact, including 404 when clearing
-an empty inbox. Read/create/delete annotations describe side effects to MCP clients.
+`success`/`result` envelope and a declared output schema. Business failures set `isError: true`
+and return `status` plus `error: { code, name, message, retryable }`. Stable codes distinguish
+`FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `RATE_LIMITED` (429), and service errors
+(500/503). Only rate-limit/server failures are retryable. Internal failure details are redacted.
+These are MCP tool results, not JSON-RPC invalid-argument errors. Some host integrations may
+still wrap tool errors as `INVALID_ARGUMENT`; clients should inspect the embedded status/code.
+
+Clearing an authorized empty inbox succeeds with `deleted_count: 0`, including repeated clears.
+Unknown/unclaimed addresses still fail authorization. Reading/deleting a missing message or
+releasing an already-released claim returns `NOT_FOUND`; an old key cannot release a new claim.
+List ordering is `received_at DESC, id DESC`; reconciliation is `received_at ASC, id ASC`.
+
+Read/create/delete annotations describe real side effects. Destructive hints remain enabled
+for deletion, clearing, and release. Client-side approval/safety blocks occur before the Worker
+and cannot be disabled by a server fix.
 
 There is no send, attachment, autonomous wait, or webhook-configuration tool. Email content
 is untrusted data; the server never follows links or loads remote images.
@@ -107,7 +119,14 @@ Run `bun install --frozen-lockfile`, `bun test`, `bun run tsc`, `bun run check`,
 `bun run deploy --dry-run --outdir dist`. MCP tests exercise the real REST routes against an
 in-memory SQLite database, including a fixture MIME message through the inbound handler.
 They cover protocol versions, concurrent request isolation, every tool, authorization,
-pagination, destruction, malformed input and HTTP/rate-limit boundaries.
+pagination (including timestamp ties), empty-clear retries, destruction, MIME/Unicode, large
+bodies, retention, concurrent mutations, malformed input and HTTP/rate-limit boundaries.
+
+The standard post-deploy smoke check also runs `scripts/mcp-smoke.ts`. To run just MCP checks,
+set `API_BASE_URL` privately and run `bun run smoke:mcp`. It exercises all nine tools, verifies
+typed 403/404 results and empty-clear retries, and removes its own random test inbox. It never
+logs credentials or deletes pre-existing inboxes. Single-message success and nonempty pagination
+are covered by SQLite/MIME integration tests, not this empty-inbox production smoke check.
 
 Use the existing Cloudflare Builds deployment path after review. No database migration is
 needed. Do not run the repository's remote `bun run dev` against production for MCP tests;

@@ -14,13 +14,49 @@ const credentials = {
 };
 const message = { ...credentials, message_id: z.string().cuid2() };
 const offset = z.number().int().min(0).default(0);
-const failure = (status: number, message: string) => ({ success: false, status, error: message });
-type ApiResult = { success: boolean; result?: unknown; error?: unknown; status?: number };
+const resultSchema = z.object({
+	success: z.boolean(),
+	result: z.unknown().optional(),
+	status: z.number().int().optional(),
+	error: z
+		.object({
+			code: z.string(),
+			name: z.string(),
+			message: z.string(),
+			retryable: z.boolean(),
+		})
+		.optional(),
+});
+type ApiResult = z.infer<typeof resultSchema>;
+const errorCodes: Record<number, string> = {
+	400: "INVALID_ARGUMENT",
+	401: "UNAUTHORIZED",
+	403: "FORBIDDEN",
+	404: "NOT_FOUND",
+	409: "CONFLICT",
+	429: "RATE_LIMITED",
+	500: "INTERNAL_ERROR",
+	503: "SERVICE_UNAVAILABLE",
+};
+const failure = (
+	status: number,
+	message: string,
+	name = errorCodes[status] ?? "MailboxError",
+): ApiResult => ({
+	success: false,
+	status,
+	error: {
+		code: errorCodes[status] ?? "MAILBOX_ERROR",
+		name,
+		message,
+		retryable: status === 429 || status >= 500,
+	},
+});
 
 /** Request-local tools. All mailbox access goes through the existing REST authorization. */
 export function createServer(request: Request, env: CloudflareBindings, ctx: ExecutionContext) {
 	const server = new McpServer(
-		{ name: "burnmail", version: "1.0.0" },
+		{ name: "burnmail", version: "1.0.1" },
 		{
 			instructions:
 				"Create an inbox before receiving mail. Save its address and claim_key; supply both on every call. " +
@@ -41,8 +77,19 @@ export function createServer(request: Request, env: CloudflareBindings, ctx: Exe
 			ctx,
 		);
 		if (response.status >= 500) return failure(response.status, "Mailbox service unavailable");
-		const body = (await response.json()) as ApiResult;
-		return response.ok ? body : { ...body, status: response.status };
+		const body = (await response.json()) as {
+			success: boolean;
+			result?: unknown;
+			error?: { name?: string; message?: string } | string;
+		};
+		if (response.ok) return { success: body.success, result: body.result };
+		return failure(
+			response.status,
+			typeof body.error === "string"
+				? body.error
+				: (body.error?.message ?? "Mailbox request failed"),
+			typeof body.error === "object" ? body.error.name : undefined,
+		);
 	}
 
 	function tool<S extends z.ZodRawShape>(
@@ -57,6 +104,7 @@ export function createServer(request: Request, env: CloudflareBindings, ctx: Exe
 			{
 				description,
 				inputSchema: z.object(shape),
+				outputSchema: resultSchema,
 				annotations: {
 					readOnlyHint: kind === "read",
 					destructiveHint: kind === "delete",
@@ -125,7 +173,7 @@ export function createServer(request: Request, env: CloudflareBindings, ctx: Exe
 	);
 	tool(
 		"list_messages",
-		"List message summaries, newest first. Reads never mark messages read. Poll for new arrivals.",
+		"List message summaries, newest first (message ID breaks timestamp ties). Reads never mark messages read. Poll for new arrivals.",
 		{ ...credentials, limit: z.number().int().min(1).max(100).default(10), offset },
 		({ email_address, claim_key, limit, offset }) =>
 			api(
@@ -156,7 +204,7 @@ export function createServer(request: Request, env: CloudflareBindings, ctx: Exe
 	);
 	tool(
 		"clear_inbox",
-		"Permanently delete all messages, keeping the address claimed.",
+		"Permanently delete all messages, keeping the address claimed. An already-empty inbox succeeds with deleted_count: 0.",
 		credentials,
 		({ email_address, claim_key }) =>
 			api("DELETE", addressPath("/emails", email_address), claim_key),
